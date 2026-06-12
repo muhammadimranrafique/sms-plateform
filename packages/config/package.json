@@ -1,0 +1,7 @@
+{
+  "name": "@sms/config",
+  "version": "3.0.0",
+  "private": true,
+  "main": "index.js",
+  "files": ["eslint-preset.js", "tailwind-preset.ts"]
+}
