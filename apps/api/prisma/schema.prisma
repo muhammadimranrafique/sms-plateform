@@ -4,26 +4,27 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL") // pooled (PgBouncer :6543)
-  directUrl = env("DIRECT_URL")   // direct (:5432) for migrations
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-// --- Sessions (Academic Years) ---
 model Session {
   id        Int         @id @default(autoincrement())
-  name      String      @unique // "2024-2025"
+  name      String      @unique
   startDate DateTime
   endDate   DateTime
   isCurrent Boolean     @default(false)
   students  Student[]
   oldPromos Promotion[] @relation("OldSession")
   newPromos Promotion[] @relation("NewSession")
+  feeStructures FeeStructure[]
+  feeCharges FeeCharge[]
+  promotionRules PromotionRule[]
   createdAt DateTime    @default(now())
 
   @@map("sessions")
 }
 
-// --- Classes ---
 model Class {
   id        Int         @id @default(autoincrement())
   name      String
@@ -33,22 +34,26 @@ model Class {
   students  Student[]
   oldPromos Promotion[] @relation("OldClass")
   newPromos Promotion[] @relation("NewClass")
+  feeStructures FeeStructure[]
 
   @@unique([name, section])
   @@map("classes")
 }
 
-// --- Students ---
 model Student {
   id          Int         @id @default(autoincrement())
   admissionNo String      @unique
+  registrationNumber String?
   name        String
   fatherName  String
+  motherName  String?
   dob         DateTime?
   gender      Gender      @default(MALE)
+  bloodGroup  String?
   contactNo   String?
   address     String?
   photoUrl    String?
+  admissionDate DateTime?
   status      Status      @default(ACTIVE)
   classId     Int
   sessionId   Int
@@ -56,6 +61,8 @@ model Student {
   session     Session     @relation(fields: [sessionId], references: [id])
   promotions  Promotion[]
   vouchers    Voucher[]
+  feeCharges  FeeCharge[]
+  discounts   Discount[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   createdBy   String?
@@ -66,57 +73,214 @@ model Student {
   @@index([status])
   @@index([deletedAt])
   @@index([classId, sessionId, status])
+  @@index([admissionNo])
+  @@index([name])
+  @@index([admissionDate])
   @@map("students")
 }
 
-// --- Promotions ---
+model FeeHead {
+  id          Int         @id @default(autoincrement())
+  name        String      @unique
+  code        String      @unique
+  description String?
+  isActive    Boolean     @default(true)
+  sortOrder   Int         @default(0)
+  items       FeeStructureItem[]
+  charges     FeeCharge[]
+  lines       VoucherLine[]
+  discounts   Discount[]
+  createdAt   DateTime    @default(now())
+
+  @@map("fee_heads")
+}
+
+model FeeStructure {
+  id        Int                @id @default(autoincrement())
+  name      String
+  classId   Int
+  sessionId Int
+  class     Class              @relation(fields: [classId], references: [id])
+  session   Session            @relation(fields: [sessionId], references: [id])
+  items     FeeStructureItem[]
+  isActive  Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@unique([classId, sessionId])
+  @@index([classId])
+  @@index([sessionId])
+  @@map("fee_structures")
+}
+
+model FeeStructureItem {
+  id             Int          @id @default(autoincrement())
+  feeStructureId Int
+  feeHeadId      Int
+  amount         Decimal      @db.Decimal(10, 2)
+  feeStructure   FeeStructure @relation(fields: [feeStructureId], references: [id])
+  feeHead        FeeHead      @relation(fields: [feeHeadId], references: [id])
+
+  @@unique([feeStructureId, feeHeadId])
+  @@map("fee_structure_items")
+}
+
+model FeeCharge {
+  id         Int          @id @default(autoincrement())
+  studentId  Int
+  feeHeadId  Int
+  sessionId  Int
+  feeMonth   String
+  amount     Decimal      @db.Decimal(10, 2)
+  dueDate    DateTime
+  fine       Decimal      @default(0) @db.Decimal(10, 2)
+  paidAmount Decimal      @default(0) @db.Decimal(10, 2)
+  status     ChargeStatus @default(UNPAID)
+  student    Student      @relation(fields: [studentId], references: [id])
+  feeHead    FeeHead      @relation(fields: [feeHeadId], references: [id])
+  session    Session      @relation(fields: [sessionId], references: [id])
+  payments   FeePayment[]
+  createdAt  DateTime     @default(now())
+
+  @@index([studentId, sessionId])
+  @@index([feeMonth])
+  @@index([feeHeadId])
+  @@index([studentId, sessionId, dueDate])
+  @@map("fee_charges")
+}
+
+model FeePayment {
+  id          Int       @id @default(autoincrement())
+  feeChargeId Int
+  amount      Decimal   @db.Decimal(10, 2)
+  paidAt      DateTime  @default(now())
+  method      FeePaymentMethod @default(CASH)
+  referenceNo String?
+  receivedBy  String?
+  feeCharge   FeeCharge @relation(fields: [feeChargeId], references: [id])
+  createdAt   DateTime  @default(now())
+
+  @@index([feeChargeId])
+  @@map("fee_payments")
+}
+
+model Discount {
+  id         Int       @id @default(autoincrement())
+  studentId  Int
+  feeHeadId  Int?
+  type       DiscountType @default(PERCENTAGE)
+  value      Decimal   @db.Decimal(10, 2)
+  reason     String?
+  approvedBy String?
+  validFrom  DateTime?
+  validUntil DateTime?
+  isActive   Boolean   @default(true)
+  student    Student   @relation(fields: [studentId], references: [id])
+  feeHead    FeeHead?  @relation(fields: [feeHeadId], references: [id])
+  createdAt  DateTime  @default(now())
+
+  @@index([studentId])
+  @@map("discounts")
+}
+
+model PromotionRule {
+  id                   Int       @id @default(autoincrement())
+  name                 String
+  sessionId            Int
+  passPercentage       Decimal   @default(40) @db.Decimal(5, 2)
+  feeClearanceRequired Boolean   @default(true)
+  isActive             Boolean   @default(true)
+  session              Session   @relation(fields: [sessionId], references: [id])
+  batches              PromotionBatch[]
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([sessionId])
+  @@index([isActive])
+  @@map("promotion_rules")
+}
+
+model PromotionBatch {
+  id         String     @id
+  status     BatchStatus @default(EXECUTED)
+  promotedBy String
+  remarks    String?
+  ruleId     Int?
+  rule       PromotionRule? @relation(fields: [ruleId], references: [id])
+  promotions Promotion[]
+  executedAt DateTime   @default(now())
+  revertedAt DateTime?
+  revertedBy String?
+
+  @@index([status])
+  @@map("promotion_batches")
+}
+
 model Promotion {
-  id           Int      @id @default(autoincrement())
+  id           Int             @id @default(autoincrement())
   studentId    Int
   oldClassId   Int
   newClassId   Int
   oldSessionId Int
   newSessionId Int
-  promotedAt   DateTime @default(now())
+  promotedAt   DateTime        @default(now())
   promotedBy   String
   batchId      String
   remarks      String?
-  student      Student  @relation(fields: [studentId], references: [id])
-  oldClass     Class    @relation("OldClass", fields: [oldClassId], references: [id])
-  newClass     Class    @relation("NewClass", fields: [newClassId], references: [id])
-  oldSession   Session  @relation("OldSession", fields: [oldSessionId], references: [id])
-  newSession   Session  @relation("NewSession", fields: [newSessionId], references: [id])
+  student      Student         @relation(fields: [studentId], references: [id])
+  oldClass     Class           @relation("OldClass", fields: [oldClassId], references: [id])
+  newClass     Class           @relation("NewClass", fields: [newClassId], references: [id])
+  oldSession   Session         @relation("OldSession", fields: [oldSessionId], references: [id])
+  newSession   Session         @relation("NewSession", fields: [newSessionId], references: [id])
+  batch        PromotionBatch  @relation(fields: [batchId], references: [id])
 
   @@unique([studentId, oldSessionId])
   @@index([batchId])
   @@map("promotions")
 }
 
-// --- Vouchers ---
 model Voucher {
-  id          Int           @id @default(autoincrement())
-  voucherNo   String        @unique
+  id          Int            @id @default(autoincrement())
+  voucherNo   String         @unique
   studentId   Int
-  voucherDate DateTime      @default(now())
+  voucherDate DateTime       @default(now())
   dueDate     DateTime
-  amount      Decimal       @db.Decimal(10, 2)
+  amount      Decimal        @db.Decimal(10, 2)
   feeMonth    String?
-  status      VoucherStatus @default(PENDING)
+  status      VoucherStatus  @default(PENDING)
+  lateFine    Decimal        @default(0) @db.Decimal(10, 2)
+  discount    Decimal        @default(0) @db.Decimal(10, 2)
+  arrears     Decimal        @default(0) @db.Decimal(10, 2)
+  netAmount   Decimal        @default(0) @db.Decimal(10, 2)
   remarks     String?
   pdfUrl      String?
   printedAt   DateTime?
   printedBy   String?
-  student     Student       @relation(fields: [studentId], references: [id])
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  student     Student        @relation(fields: [studentId], references: [id])
+  lines       VoucherLine[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   @@index([studentId])
   @@index([status])
   @@index([feeMonth])
+  @@index([studentId, feeMonth, status])
   @@map("vouchers")
 }
 
-// --- Voucher Sequence (gap-tolerant, race-safe numbering) ---
+model VoucherLine {
+  id          Int      @id @default(autoincrement())
+  voucherId   Int
+  feeHeadId   Int
+  description String?
+  amount      Decimal  @db.Decimal(10, 2)
+  voucher     Voucher  @relation(fields: [voucherId], references: [id])
+  feeHead     FeeHead  @relation(fields: [feeHeadId], references: [id])
+
+  @@index([voucherId])
+  @@map("voucher_lines")
+}
+
 model VoucherSequence {
   id        Int @id @default(1)
   lastValue Int @default(0)
@@ -124,7 +288,6 @@ model VoucherSequence {
   @@map("voucher_sequence")
 }
 
-// --- Audit Log ---
 model AuditLog {
   id        BigInt   @id @default(autoincrement())
   userId    String
@@ -159,5 +322,31 @@ enum Status {
 enum VoucherStatus {
   PENDING
   PAID
+  PARTIAL
+  OVERDUE
   CANCELLED
+}
+
+enum ChargeStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  OVERDUE
+}
+
+enum FeePaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CHEQUE
+  ONLINE
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum BatchStatus {
+  EXECUTED
+  ROLLED_BACK
 }

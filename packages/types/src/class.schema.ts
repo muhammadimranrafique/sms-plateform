@@ -9,5 +9,10 @@ export const CreateClassSchema = z.object({
 
 export const UpdateClassSchema = CreateClassSchema.partial();
 
+export const ClassQuerySchema = z.object({
+  isActive: z.coerce.boolean().optional(),
+});
+
 export type CreateClassDto = z.infer<typeof CreateClassSchema>;
 export type UpdateClassDto = z.infer<typeof UpdateClassSchema>;
+export type ClassQuery = z.infer<typeof ClassQuerySchema>;

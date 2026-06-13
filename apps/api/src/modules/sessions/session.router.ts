@@ -9,7 +9,9 @@ sessionRouter.use(authGuard);
 
 sessionRouter.get('/', ctrl.list);
 sessionRouter.get('/current', ctrl.current);
+sessionRouter.get('/:id', validate(IdParamSchema, 'params'), ctrl.getById);
 sessionRouter.post('/', rbac('admin'), validate(CreateSessionSchema), ctrl.create);
+sessionRouter.post('/:id/rollover', rbac('admin'), validate(IdParamSchema, 'params'), ctrl.rollover);
 sessionRouter.patch(
   '/:id',
   rbac('admin'),

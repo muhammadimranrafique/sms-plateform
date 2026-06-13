@@ -14,7 +14,7 @@ export const getById = async (req: AuthRequest, res: Response) => {
 };
 
 export const create = async (req: AuthRequest, res: Response) => {
-  const student = await service.createStudent(req.body, req.user!, req.id);
+  const student = await service.createStudent(req.body, req.user!, req.id as string);
   res.status(201).json(created(student));
 };
 

@@ -9,8 +9,13 @@ export const validate =
   (schema: ZodSchema, target: Target = 'body') =>
   (req: Request, _res: Response, next: NextFunction): void => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (req as any)[target] = schema.parse((req as any)[target]);
+      const parsed = schema.parse((req as any)[target]);
+      // Express 5 makes query/params read-only getters, so use
+      // defineProperty to shadow them instead of direct assignment.
+      Object.defineProperty(req, target, {
+        get: () => parsed,
+        configurable: true,
+      });
       next();
     } catch (err) {
       if (err instanceof ZodError) {

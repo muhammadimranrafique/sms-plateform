@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CreateStudentDto, StudentQuery } from '@sms/types';
+import type { CreateStudentDto, UpdateStudentDto, StudentQuery } from '@sms/types';
 import { api } from '../api/client';
 
 export interface StudentRow {
@@ -18,6 +18,7 @@ export interface StudentRow {
 const keys = {
   all: ['students'] as const,
   list: (q: Partial<StudentQuery>) => ['students', 'list', q] as const,
+  detail: (id: number) => ['students', id] as const,
 };
 
 export function useStudents(query: Partial<StudentQuery> = {}) {
@@ -30,10 +31,34 @@ export function useStudents(query: Partial<StudentQuery> = {}) {
   });
 }
 
+export function useStudent(id: number) {
+  return useQuery({
+    queryKey: keys.detail(id),
+    queryFn: () => api.get<StudentRow>(`/students/${id}`),
+    enabled: !!id,
+  });
+}
+
 export function useCreateStudent() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (dto: CreateStudentDto) => api.post<StudentRow>('/students', dto),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+  });
+}
+
+export function useUpdateStudent(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: UpdateStudentDto) => api.patch<StudentRow>(`/students/${id}`, dto),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+  });
+}
+
+export function useDeleteStudent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/students/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
   });
 }

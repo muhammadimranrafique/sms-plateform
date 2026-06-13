@@ -16,8 +16,16 @@ export const create = async (req: AuthRequest, res: Response) => {
   res.status(201).json(created(await service.createVoucher(req.body, req.user!)));
 };
 
-export const createBatch = async (req: AuthRequest, res: Response) => {
-  res.status(201).json(created(await service.createBatchVouchers(req.body, req.user!)));
+export const generateSingle = async (req: AuthRequest, res: Response) => {
+  res.status(201).json(created(await service.generateVoucher(req.body, req.user!)));
+};
+
+export const generateBatch = async (req: AuthRequest, res: Response) => {
+  res.status(201).json(created(await service.generateBatchVouchers(req.body, req.user!)));
+};
+
+export const generateAllMonths = async (req: AuthRequest, res: Response) => {
+  res.status(201).json(created(await service.generateAllMonths(req.body, req.user!)));
 };
 
 export const updateStatus = async (req: AuthRequest, res: Response) => {

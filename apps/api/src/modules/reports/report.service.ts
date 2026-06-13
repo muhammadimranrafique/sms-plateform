@@ -10,7 +10,8 @@ export async function getDashboardStats() {
       prisma.student.groupBy({
         by: ['classId'],
         where: { deletedAt: null, status: 'ACTIVE' },
-        _count: { _all: true },
+        _count: { classId: true },
+        orderBy: { classId: 'asc' },
       }),
     ]);
 
@@ -19,7 +20,8 @@ export async function getDashboardStats() {
     activeStudents,
     totalClasses,
     pendingVouchers,
-    studentsByClass: byClass.map((b) => ({ classId: b.classId, count: b._count._all })),
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    studentsByClass: byClass.map((b) => ({ classId: b.classId, count: (b._count as { classId: number }).classId })),
   };
 }
 
