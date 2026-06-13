@@ -13,6 +13,22 @@ import { paginate, toSkipTake } from '../../shared/pagination';
 import { NotFoundError, BadRequestError } from '../../shared/errors';
 import type { Actor } from '../../shared/types';
 
+async function validateFeeStructureExists(tx: PrismaTx, classId: number, sessionId: number): Promise<void> {
+  const exists = await tx.feeStructure.findUnique({
+    where: { classId_sessionId: { classId, sessionId } },
+    select: { id: true },
+  });
+  if (!exists) {
+    const cls = await tx.class.findUnique({ where: { id: classId }, select: { name: true, section: true } });
+    const sess = await tx.session.findUnique({ where: { id: sessionId }, select: { name: true } });
+    const classLabel = cls ? `${cls.name}${cls.section ? ` - ${cls.section}` : ''}` : `ID ${classId}`;
+    const sessionLabel = sess?.name ?? `ID ${sessionId}`;
+    throw new BadRequestError(
+      `No fee structure defined for class "${classLabel}" and session "${sessionLabel}". Create one in Fee Structures first.`,
+    );
+  }
+}
+
 async function nextVoucherNo(tx: PrismaTx): Promise<string> {
   const seq = await tx.voucherSequence.update({
     where: { id: 1 },
@@ -40,7 +56,15 @@ async function computeVoucherAmounts(
     include: { items: { include: { feeHead: true } } },
   });
 
-  if (!feeStructure) throw new BadRequestError('No fee structure defined for this class and session');
+  if (!feeStructure) {
+    const cls = await tx.class.findUnique({ where: { id: classId }, select: { name: true, section: true } });
+    const sess = await tx.session.findUnique({ where: { id: sessionId }, select: { name: true } });
+    const classLabel = cls ? `${cls.name}${cls.section ? ` - ${cls.section}` : ''}` : `ID ${classId}`;
+    const sessionLabel = sess?.name ?? `ID ${sessionId}`;
+    throw new BadRequestError(
+      `No fee structure defined for class "${classLabel}" and session "${sessionLabel}". Create one in Fee Structures first.`,
+    );
+  }
 
   const lines = feeStructure.items.map((item) => ({
     feeHeadId: item.feeHeadId,
@@ -136,6 +160,8 @@ export async function generateVoucher(dto: GenerateVoucherDto, user: Actor) {
   const student = await prisma.student.findFirst({ where: { id: dto.studentId, deletedAt: null } });
   if (!student) throw new NotFoundError('Student');
 
+  await validateFeeStructureExists(prisma as unknown as PrismaTx, student.classId, student.sessionId);
+
   return prisma.$transaction(
     async (tx) => {
     await tx.$executeRawUnsafe(`SET LOCAL app.user_id = '${user.id}'`);
@@ -198,6 +224,8 @@ export async function generateBatchVouchers(dto: GenerateBatchVoucherDto, user: 
     select: { id: true },
   });
   if (students.length === 0) throw new NotFoundError('Active students for class/session');
+
+  await validateFeeStructureExists(prisma as unknown as PrismaTx, dto.classId, dto.sessionId);
 
   return prisma.$transaction(
     async (tx) => {
@@ -262,6 +290,8 @@ export async function generateBatchVouchers(dto: GenerateBatchVoucherDto, user: 
 export async function generateAllMonths(dto: GenerateAllMonthsVoucherDto, user: Actor) {
   const student = await prisma.student.findFirst({ where: { id: dto.studentId, deletedAt: null } });
   if (!student) throw new NotFoundError('Student');
+
+  await validateFeeStructureExists(prisma as unknown as PrismaTx, student.classId, student.sessionId);
 
   const allMonths: GenerateVoucherDto[] = [];
   const date = new Date(dto.dueDate);
