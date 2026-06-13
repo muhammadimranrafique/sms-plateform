@@ -1,27 +1,36 @@
 import { Prisma } from '@prisma/client';
 import type {
   CreateVoucherDto,
-  GenerateVoucherDto,
-  GenerateBatchVoucherDto,
   GenerateAllMonthsVoucherDto,
+  GenerateBatchVoucherDto,
+  GenerateVoucherDto,
   UpdateVoucherStatusDto,
   VoucherQuery,
 } from '@sms/types';
-import { prisma } from '../../config/prisma';
 import type { PrismaTx } from '../../config/prisma';
+import { prisma } from '../../config/prisma';
+import { BadRequestError, NotFoundError } from '../../shared/errors';
 import { paginate, toSkipTake } from '../../shared/pagination';
-import { NotFoundError, BadRequestError } from '../../shared/errors';
 import type { Actor } from '../../shared/types';
 
-async function validateFeeStructureExists(tx: PrismaTx, classId: number, sessionId: number): Promise<void> {
+async function validateFeeStructureExists(
+  tx: PrismaTx,
+  classId: number,
+  sessionId: number,
+): Promise<void> {
   const exists = await tx.feeStructure.findUnique({
     where: { classId_sessionId: { classId, sessionId } },
     select: { id: true },
   });
   if (!exists) {
-    const cls = await tx.class.findUnique({ where: { id: classId }, select: { name: true, section: true } });
+    const cls = await tx.class.findUnique({
+      where: { id: classId },
+      select: { name: true, section: true },
+    });
     const sess = await tx.session.findUnique({ where: { id: sessionId }, select: { name: true } });
-    const classLabel = cls ? `${cls.name}${cls.section ? ` - ${cls.section}` : ''}` : `ID ${classId}`;
+    const classLabel = cls
+      ? `${cls.name}${cls.section ? ` - ${cls.section}` : ''}`
+      : `ID ${classId}`;
     const sessionLabel = sess?.name ?? `ID ${sessionId}`;
     throw new BadRequestError(
       `No fee structure defined for class "${classLabel}" and session "${sessionLabel}". Create one in Fee Structures first.`,
@@ -57,9 +66,14 @@ async function computeVoucherAmounts(
   });
 
   if (!feeStructure) {
-    const cls = await tx.class.findUnique({ where: { id: classId }, select: { name: true, section: true } });
+    const cls = await tx.class.findUnique({
+      where: { id: classId },
+      select: { name: true, section: true },
+    });
     const sess = await tx.session.findUnique({ where: { id: sessionId }, select: { name: true } });
-    const classLabel = cls ? `${cls.name}${cls.section ? ` - ${cls.section}` : ''}` : `ID ${classId}`;
+    const classLabel = cls
+      ? `${cls.name}${cls.section ? ` - ${cls.section}` : ''}`
+      : `ID ${classId}`;
     const sessionLabel = sess?.name ?? `ID ${sessionId}`;
     throw new BadRequestError(
       `No fee structure defined for class "${classLabel}" and session "${sessionLabel}". Create one in Fee Structures first.`,
@@ -75,7 +89,12 @@ async function computeVoucherAmounts(
   const totalAmount = lines.reduce((s, l) => s + l.amount.toNumber(), 0);
 
   const discounts = await tx.discount.findMany({
-    where: { studentId, isActive: true, validFrom: { lte: dueDate }, OR: [{ validUntil: null }, { validUntil: { gte: dueDate } }] },
+    where: {
+      studentId,
+      isActive: true,
+      validFrom: { lte: dueDate },
+      OR: [{ validUntil: null }, { validUntil: { gte: dueDate } }],
+    },
   });
 
   let discountAmount = 0;
@@ -83,9 +102,9 @@ async function computeVoucherAmounts(
     if (d.type === 'PERCENTAGE') {
       if (d.feeHeadId) {
         const line = lines.find((l) => l.feeHeadId === d.feeHeadId);
-        if (line) discountAmount += line.amount.toNumber() * d.value.toNumber() / 100;
+        if (line) discountAmount += (line.amount.toNumber() * d.value.toNumber()) / 100;
       } else {
-        discountAmount += totalAmount * d.value.toNumber() / 100;
+        discountAmount += (totalAmount * d.value.toNumber()) / 100;
       }
     } else {
       discountAmount += d.value.toNumber();
@@ -96,7 +115,10 @@ async function computeVoucherAmounts(
     where: { studentId, sessionId, status: { in: ['UNPAID', 'OVERDUE', 'PARTIAL'] } },
   });
 
-  const arrearsAmount = arrears.reduce((s, c) => s + c.amount.toNumber() + c.fine.toNumber() - c.paidAmount.toNumber(), 0);
+  const arrearsAmount = arrears.reduce(
+    (s, c) => s + c.amount.toNumber() + c.fine.toNumber() - c.paidAmount.toNumber(),
+    0,
+  );
   const netAmount = Math.max(0, totalAmount - discountAmount + arrearsAmount);
 
   return { lines, totalAmount, discountAmount, arrearsAmount, netAmount };
@@ -113,7 +135,12 @@ export async function listVouchers(q: VoucherQuery) {
     ...(q.toDate && { voucherDate: { lte: q.toDate } }),
   };
   const [data, total] = await prisma.$transaction([
-    prisma.voucher.findMany({ where, include: voucherInclude, ...toSkipTake(q.page, q.limit), orderBy: { [q.sortBy]: q.sortDir } }),
+    prisma.voucher.findMany({
+      where,
+      include: voucherInclude,
+      ...toSkipTake(q.page, q.limit),
+      orderBy: { [q.sortBy]: q.sortDir },
+    }),
     prisma.voucher.count({ where }),
   ]);
   return paginate(data, total, q.page, q.limit);
@@ -121,6 +148,15 @@ export async function listVouchers(q: VoucherQuery) {
 
 export async function getVoucher(id: number) {
   const voucher = await prisma.voucher.findUnique({ where: { id }, include: voucherInclude });
+  if (!voucher) throw new NotFoundError('Voucher');
+  return voucher;
+}
+
+export async function getVoucherByVoucherNo(voucherNo: string) {
+  const voucher = await prisma.voucher.findUnique({
+    where: { voucherNo },
+    include: voucherInclude,
+  });
   if (!voucher) throw new NotFoundError('Voucher');
   return voucher;
 }
@@ -160,62 +196,75 @@ export async function generateVoucher(dto: GenerateVoucherDto, user: Actor) {
   const student = await prisma.student.findFirst({ where: { id: dto.studentId, deletedAt: null } });
   if (!student) throw new NotFoundError('Student');
 
-  await validateFeeStructureExists(prisma as unknown as PrismaTx, student.classId, student.sessionId);
+  await validateFeeStructureExists(
+    prisma as unknown as PrismaTx,
+    student.classId,
+    student.sessionId,
+  );
 
   return prisma.$transaction(
     async (tx) => {
-    await tx.$executeRawUnsafe(`SET LOCAL app.user_id = '${user.id}'`);
+      await tx.$executeRawUnsafe(`SET LOCAL app.user_id = '${user.id}'`);
 
-    const existing = await tx.voucher.findFirst({
-      where: { studentId: dto.studentId, feeMonth: dto.feeMonth },
-    });
-    if (existing) return existing;
+      const existing = await tx.voucher.findFirst({
+        where: { studentId: dto.studentId, feeMonth: dto.feeMonth },
+      });
+      if (existing) return existing;
 
-    const voucherNo = await nextVoucherNo(tx);
-    const fine = 0;
+      const voucherNo = await nextVoucherNo(tx);
+      const fine = 0;
 
-    const computed = await computeVoucherAmounts(dto.studentId, student.sessionId, student.classId, dto.feeMonth, dto.dueDate, tx);
+      const computed = await computeVoucherAmounts(
+        dto.studentId,
+        student.sessionId,
+        student.classId,
+        dto.feeMonth,
+        dto.dueDate,
+        tx,
+      );
 
-    const voucher = await tx.voucher.create({
-      data: {
-        voucherNo,
-        studentId: dto.studentId,
-        dueDate: dto.dueDate,
-        amount: new Prisma.Decimal(computed.totalAmount),
-        lateFine: new Prisma.Decimal(fine),
-        discount: new Prisma.Decimal(computed.discountAmount),
-        arrears: new Prisma.Decimal(computed.arrearsAmount),
-        netAmount: new Prisma.Decimal(computed.netAmount),
-        feeMonth: dto.feeMonth,
-        remarks: dto.remarks,
-        lines: {
-          create: computed.lines.map((l) => ({
-            feeHeadId: l.feeHeadId,
-            description: l.description,
-            amount: l.amount,
-          })),
+      const voucher = await tx.voucher.create({
+        data: {
+          voucherNo,
+          studentId: dto.studentId,
+          dueDate: dto.dueDate,
+          amount: new Prisma.Decimal(computed.totalAmount),
+          lateFine: new Prisma.Decimal(fine),
+          discount: new Prisma.Decimal(computed.discountAmount),
+          arrears: new Prisma.Decimal(computed.arrearsAmount),
+          netAmount: new Prisma.Decimal(computed.netAmount),
+          feeMonth: dto.feeMonth,
+          remarks: dto.remarks,
+          lines: {
+            create: computed.lines.map((l) => ({
+              feeHeadId: l.feeHeadId,
+              description: l.description,
+              amount: l.amount,
+            })),
+          },
         },
-      },
-    });
+      });
 
-    await tx.feeCharge.createMany({
-      data: computed.lines.map((l) => ({
-        studentId: dto.studentId,
-        feeHeadId: l.feeHeadId,
-        sessionId: student.sessionId,
-        voucherId: voucher.id,
-        feeMonth: dto.feeMonth,
-        amount: l.amount,
-        dueDate: dto.dueDate,
-        fine,
-      })),
-    });
+      await tx.feeCharge.createMany({
+        data: computed.lines.map((l) => ({
+          studentId: dto.studentId,
+          feeHeadId: l.feeHeadId,
+          sessionId: student.sessionId,
+          voucherId: voucher.id,
+          feeMonth: dto.feeMonth,
+          amount: l.amount,
+          dueDate: dto.dueDate,
+          fine,
+        })),
+      });
 
-    return tx.voucher.findUnique({
-      where: { id: voucher.id },
-      include: voucherInclude,
-    });
-  }, { timeout: 15000 });
+      return tx.voucher.findUnique({
+        where: { id: voucher.id },
+        include: voucherInclude,
+      });
+    },
+    { timeout: 15000 },
+  );
 }
 
 export async function generateBatchVouchers(dto: GenerateBatchVoucherDto, user: Actor) {
@@ -238,10 +287,20 @@ export async function generateBatchVouchers(dto: GenerateBatchVoucherDto, user: 
         });
         if (existing) continue;
 
-        const student = await tx.student.findUnique({ where: { id: s.id }, select: { classId: true, sessionId: true } });
+        const student = await tx.student.findUnique({
+          where: { id: s.id },
+          select: { classId: true, sessionId: true },
+        });
         if (!student) continue;
 
-        const computed = await computeVoucherAmounts(s.id, student.sessionId, student.classId, dto.feeMonth, dto.dueDate, tx);
+        const computed = await computeVoucherAmounts(
+          s.id,
+          student.sessionId,
+          student.classId,
+          dto.feeMonth,
+          dto.dueDate,
+          tx,
+        );
         const voucherNo = await nextVoucherNo(tx);
         const fine = 0;
 
@@ -291,7 +350,11 @@ export async function generateAllMonths(dto: GenerateAllMonthsVoucherDto, user: 
   const student = await prisma.student.findFirst({ where: { id: dto.studentId, deletedAt: null } });
   if (!student) throw new NotFoundError('Student');
 
-  await validateFeeStructureExists(prisma as unknown as PrismaTx, student.classId, student.sessionId);
+  await validateFeeStructureExists(
+    prisma as unknown as PrismaTx,
+    student.classId,
+    student.sessionId,
+  );
 
   const allMonths: GenerateVoucherDto[] = [];
   const date = new Date(dto.dueDate);
@@ -315,7 +378,17 @@ export async function generateAllMonths(dto: GenerateAllMonthsVoucherDto, user: 
   return { studentId: dto.studentId, generated: results.length, months: results };
 }
 
-export async function createBatchVouchersLegacy(dto: { classId: number; sessionId: number; dueDate: Date; amount: number; feeMonth?: string; idempotencyKey: string }, user: Actor) {
+export async function createBatchVouchersLegacy(
+  dto: {
+    classId: number;
+    sessionId: number;
+    dueDate: Date;
+    amount: number;
+    feeMonth?: string;
+    idempotencyKey: string;
+  },
+  user: Actor,
+) {
   const students = await prisma.student.findMany({
     where: { classId: dto.classId, sessionId: dto.sessionId, status: 'ACTIVE', deletedAt: null },
     select: { id: true },

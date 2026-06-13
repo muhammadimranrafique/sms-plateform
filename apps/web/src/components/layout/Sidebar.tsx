@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, GraduationCap, Receipt, ArrowUpDown, DollarSign, Percent, Calendar, CreditCard } from 'lucide-react';
+import { LayoutDashboard, Users, GraduationCap, Receipt, ArrowUpDown, DollarSign, Percent, Calendar, CreditCard, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const nav = [
@@ -15,6 +15,7 @@ const nav = [
   { href: '/dashboard/payments', label: 'Payments', icon: CreditCard },
   { href: '/dashboard/fee-structures', label: 'Fee Structures', icon: DollarSign },
   { href: '/dashboard/discounts', label: 'Discounts', icon: Percent },
+  { href: '/dashboard/reports', label: 'Reports', icon: BarChart3 },
 ] as const;
 
 export function Sidebar() {

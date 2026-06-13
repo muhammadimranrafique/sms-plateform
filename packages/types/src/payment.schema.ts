@@ -18,8 +18,11 @@ export const ReceivePaymentSchema = z.object({
   { message: 'Either voucherNo or chargeIds must be provided' },
 );
 
+export const ReverseReasonSchema = z.enum(['CHEQUE_BOUNCE', 'OTHER']);
+
 export const ReversePaymentSchema = z.object({
   reason: z.string().max(500).optional(),
+  reverseReason: ReverseReasonSchema.optional(),
 });
 
 export const PaymentQuerySchema = z.object({

@@ -19,6 +19,10 @@ import { feePaymentRouter } from './modules/fee-payments/fee-payment.router';
 import { paymentRouter } from './modules/payments/payment.router';
 import { discountRouter } from './modules/discounts/discount.router';
 import { reportRouter } from './modules/reports/report.router';
+import { reportV2Router } from './modules/reports/report-v2.router';
+import { aggregationRouter } from './modules/aggregation/aggregation.router';
+import { defaulterRouter } from './modules/defaulters/defaulter.router';
+import { exportRouter } from './modules/exports/export.router';
 import { adminRouter } from './modules/admin/admin.router';
 
 export function createApp(env: ApiEnv) {
@@ -57,6 +61,10 @@ export function createApp(env: ApiEnv) {
   app.use('/api/v1/payments', paymentRouter);
   app.use('/api/v1/discounts', discountRouter);
   app.use('/api/v1/reports', reportRouter);
+  app.use('/api/v1/reports/v2', reportV2Router);
+  app.use('/api/v1/aggregation', aggregationRouter);
+  app.use('/api/v1/defaulters', defaulterRouter);
+  app.use('/api/v1/exports', exportRouter);
   app.use('/api/v1/admin', adminRouter);
 
   app.use(notFound);

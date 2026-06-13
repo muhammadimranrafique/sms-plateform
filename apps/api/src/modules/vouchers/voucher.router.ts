@@ -15,6 +15,7 @@ import * as ctrl from './voucher.controller';
 export const voucherRouter = Router();
 voucherRouter.use(authGuard);
 
+voucherRouter.get('/by-voucher-no/:voucherNo/print', ctrl.printByVoucherNo);
 voucherRouter.get('/', validate(VoucherQuerySchema, 'query'), ctrl.list);
 voucherRouter.get('/:id', validate(IdParamSchema, 'params'), ctrl.getById);
 
@@ -31,13 +32,13 @@ voucherRouter.patch(
   ctrl.updateStatus,
 );
 
-voucherRouter.get(
-  '/by-voucher-no/:voucherNo/status',
-  ctrl.getStatusByVoucherNo,
-);
+voucherRouter.get('/by-voucher-no/:voucherNo/status', ctrl.getStatusByVoucherNo);
+
+voucherRouter.get('/by-voucher-no/:voucherNo/print', ctrl.printByVoucherNo);
 
 voucherRouter.patch(
   '/by-voucher-no/:voucherNo/recalculate',
   rbac('admin', 'staff'),
   ctrl.recalculateVoucherStatus,
 );
+

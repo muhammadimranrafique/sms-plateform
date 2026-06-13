@@ -21,6 +21,7 @@ model Session {
   feeCharges FeeCharge[]
   lateFineRules LateFineRule[]
   promotionRules PromotionRule[]
+  defaulterAlerts DefaulterAlert[]
   createdAt DateTime    @default(now())
 
   @@map("sessions")
@@ -66,6 +67,8 @@ model Student {
   payments    Payment[]
   studentLedger StudentLedger?
   discounts   Discount[]
+  concessions StudentConcession[]
+  defaulterAlerts DefaulterAlert[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   createdBy   String?
@@ -93,6 +96,7 @@ model FeeHead {
   charges     FeeCharge[]
   lines       VoucherLine[]
   discounts   Discount[]
+  concessions StudentConcession[]
   createdAt   DateTime    @default(now())
 
   @@map("fee_heads")
@@ -330,6 +334,7 @@ model Voucher {
   student     Student        @relation(fields: [studentId], references: [id])
   lines       VoucherLine[]
   feeCharges  FeeCharge[]
+  printLogs   VoucherPrintLog[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
@@ -377,6 +382,120 @@ model AuditLog {
   @@index([userId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ======== FEE CONCESSION / SCHOLARSHIP ========
+
+model FeeConcession {
+  id          Int                @id @default(autoincrement())
+  name        String             @unique
+  type        ConcessionType     @default(PERCENTAGE)
+  value       Decimal            @db.Decimal(10, 2)
+  description String?
+  criteria    Json?
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  assignments StudentConcession[]
+
+  @@map("fee_concessions")
+}
+
+model StudentConcession {
+  id           Int              @id @default(autoincrement())
+  studentId    Int
+  concessionId Int
+  feeHeadId    Int?
+  startMonth   String
+  endMonth     String?
+  approvedBy   String
+  approvedAt   DateTime         @default(now())
+  remarks      String?
+  student      Student          @relation(fields: [studentId], references: [id])
+  concession   FeeConcession    @relation(fields: [concessionId], references: [id])
+  feeHead      FeeHead?         @relation(fields: [feeHeadId], references: [id])
+
+  @@unique([studentId, concessionId, feeHeadId, startMonth])
+  @@index([studentId])
+  @@index([concessionId])
+  @@map("student_concessions")
+}
+
+// ======== FEE AGGREGATION (Daily Rollup) ========
+
+model FeeAggregationDaily {
+  id              BigInt     @id @default(autoincrement())
+  date            DateTime
+  classId         Int?
+  sessionId       Int?
+  feeHeadId       Int?
+  totalAssigned   Decimal    @db.Decimal(14, 2)
+  totalPaid       Decimal    @db.Decimal(14, 2)
+  totalFine       Decimal    @db.Decimal(14, 2)
+  totalDiscount   Decimal    @db.Decimal(14, 2)
+  totalConcession Decimal    @db.Decimal(14, 2) @default(0)
+  totalOutstanding Decimal   @db.Decimal(14, 2)
+  studentCount    Int
+  paidCount       Int
+  partialCount    Int
+  overdueCount    Int
+  unpaidCount     Int
+
+  @@index([date])
+  @@index([date, classId])
+  @@index([sessionId, classId])
+  @@map("fee_aggregation_daily")
+}
+
+// ======== DEFAULTER ALERTS ========
+
+model DefaulterAlert {
+  id          Int          @id @default(autoincrement())
+  studentId   Int
+  sessionId   Int
+  overdueDays Int
+  amountDue   Decimal      @db.Decimal(10, 2)
+  alertLevel  AlertLevel
+  status      AlertStatus  @default(ACTIVE)
+  notifiedAt  DateTime?
+  notifiedVia String?
+  resolvedAt  DateTime?
+  resolvedBy  String?
+  remarks     String?
+  student     Student      @relation(fields: [studentId], references: [id])
+  session     Session      @relation(fields: [sessionId], references: [id])
+  createdAt   DateTime     @default(now())
+
+  @@index([studentId, status])
+  @@index([sessionId, alertLevel, status])
+  @@index([status, createdAt])
+  @@map("defaulter_alerts")
+}
+
+// ======== CHEQUE BOUNCE FEE RULE ========
+
+model BounceFeeRule {
+  id        Int       @id @default(autoincrement())
+  name      String
+  fee       Decimal   @db.Decimal(10, 2) @default(500)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  @@map("bounce_fee_rules")
+}
+
+// ======== VOUCHER REPRINT TRACKING ========
+
+model VoucherPrintLog {
+  id        BigInt   @id @default(autoincrement())
+  voucherId Int
+  printedBy String
+  printType String
+  printedAt DateTime @default(now())
+  voucher   Voucher  @relation(fields: [voucherId], references: [id])
+
+  @@index([voucherId])
+  @@map("voucher_print_logs")
 }
 
 enum Gender {
@@ -431,4 +550,21 @@ enum DiscountType {
 enum BatchStatus {
   EXECUTED
   ROLLED_BACK
+}
+
+enum ConcessionType {
+  PERCENTAGE
+  FIXED
+}
+
+enum AlertLevel {
+  YELLOW
+  ORANGE
+  RED
+}
+
+enum AlertStatus {
+  ACTIVE
+  RESOLVED
+  DISMISSED
 }

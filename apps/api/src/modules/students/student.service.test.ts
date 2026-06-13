@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock prisma + audit before importing the service under test.
-const mockPrisma = {
+const mockPrisma = vi.hoisted(() => ({
   student: {
     findFirst: vi.fn(),
     findUnique: vi.fn(),
@@ -11,7 +11,7 @@ const mockPrisma = {
     update: vi.fn(),
   },
   $transaction: vi.fn(),
-};
+}));
 vi.mock('../../config/prisma', () => ({ prisma: mockPrisma }));
 vi.mock('../../shared/audit', () => ({
   audit: vi.fn(),

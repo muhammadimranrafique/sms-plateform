@@ -45,7 +45,12 @@ export const StudentQuerySchema = z.object({
   sortBy: z.enum(['name', 'admissionNo', 'createdAt', 'admissionDate', 'dob']).default('name'),
   sortDir: z.enum(['asc', 'desc']).default('asc'),
   page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().min(1).max(500).default(20),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(20),
 });
 
 export type Gender = z.infer<typeof GenderSchema>;

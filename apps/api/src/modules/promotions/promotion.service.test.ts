@@ -1,17 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mockTx = {
+const mockTx = vi.hoisted(() => ({
   $executeRawUnsafe: vi.fn(),
   student: { findMany: vi.fn(), updateMany: vi.fn() },
   promotion: { createMany: vi.fn() },
   promotionBatch: { create: vi.fn() },
-};
-const mockPrisma = {
+}));
+
+const mockPrisma = vi.hoisted(() => ({
   promotion: { findFirst: vi.fn(), count: vi.fn() },
   class: { findUnique: vi.fn() },
   session: { findUnique: vi.fn() },
   $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(mockTx)),
-};
+}));
 vi.mock('../../config/prisma', () => ({ prisma: mockPrisma }));
 
 import * as service from './promotion.service';

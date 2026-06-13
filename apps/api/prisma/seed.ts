@@ -1,4 +1,4 @@
-import { PrismaClient, Gender, Status } from '@prisma/client';
+import { PrismaClient, Gender, Status, ConcessionType, AlertLevel, AlertStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -102,9 +102,12 @@ function getClassId(classRecords: { id: number; name: string; section: string | 
 
 async function main() {
   console.log('Clearing existing data...');
+  await prisma.paymentAllocation.deleteMany();
   await prisma.feePayment.deleteMany();
+  await prisma.payment.deleteMany();
   await prisma.feeCharge.deleteMany();
   await prisma.voucherLine.deleteMany();
+  await prisma.voucherPrintLog.deleteMany();
   await prisma.voucher.deleteMany();
   await prisma.discount.deleteMany();
   await prisma.promotion.deleteMany();
@@ -113,6 +116,11 @@ async function main() {
   await prisma.feeStructureItem.deleteMany();
   await prisma.feeStructure.deleteMany();
   await prisma.feeHead.deleteMany();
+  await prisma.studentConcession.deleteMany();
+  await prisma.feeConcession.deleteMany();
+  await prisma.defaulterAlert.deleteMany();
+  await prisma.bounceFeeRule.deleteMany();
+  await prisma.studentLedger.deleteMany();
   await prisma.student.deleteMany();
   await prisma.class.deleteMany();
   await prisma.session.deleteMany();
@@ -342,6 +350,151 @@ async function main() {
     },
   });
 
+  console.log('Creating fee concessions...');
+  const concessions = await Promise.all([
+    prisma.feeConcession.create({
+      data: {
+        name: 'Sibling Discount',
+        type: ConcessionType.PERCENTAGE,
+        value: 10,
+        description: '10% discount for siblings',
+        criteria: { siblingEnrolled: true },
+      },
+    }),
+    prisma.feeConcession.create({
+      data: {
+        name: 'Merit Scholarship',
+        type: ConcessionType.PERCENTAGE,
+        value: 25,
+        description: '25% merit-based scholarship for top performers',
+        criteria: { minPercentage: 85 },
+      },
+    }),
+    prisma.feeConcession.create({
+      data: {
+        name: 'Need-Based Aid',
+        type: ConcessionType.PERCENTAGE,
+        value: 15,
+        description: '15% need-based financial assistance',
+        criteria: { incomeBelow: 50000 },
+      },
+    }),
+    prisma.feeConcession.create({
+      data: {
+        name: 'Staff Child Concession',
+        type: ConcessionType.PERCENTAGE,
+        value: 50,
+        description: '50% concession for staff children',
+        criteria: { isStaffChild: true },
+      },
+    }),
+  ]);
+
+  console.log('Assigning concessions to students...');
+  const allStudents = await prisma.student.findMany({ take: 20 });
+  const tuitionHead = feeHeads.find((h) => h.code === 'TUITION')!;
+  const examHead = feeHeads.find((h) => h.code === 'EXAM')!;
+  const libraryHead = feeHeads.find((h) => h.code === 'LIBRARY')!;
+
+  if (allStudents.length >= 4) {
+    await prisma.studentConcession.create({
+      data: {
+        studentId: allStudents[0]!.id,
+        concessionId: concessions[1]!.id, // Merit Scholarship
+        feeHeadId: tuitionHead.id,
+        startMonth: '2024-08',
+        endMonth: '2025-06',
+        approvedBy: 'seed@system',
+        remarks: 'Top performer in annual exams',
+      },
+    });
+    await prisma.studentConcession.create({
+      data: {
+        studentId: allStudents[2]!.id,
+        concessionId: concessions[0]!.id, // Sibling Discount
+        feeHeadId: tuitionHead.id,
+        startMonth: '2024-08',
+        endMonth: '2025-06',
+        approvedBy: 'seed@system',
+        remarks: 'Sibling already enrolled',
+      },
+    });
+    await prisma.studentConcession.create({
+      data: {
+        studentId: allStudents[4]!.id,
+        concessionId: concessions[2]!.id, // Need-Based Aid
+        feeHeadId: tuitionHead.id,
+        startMonth: '2024-08',
+        endMonth: '2025-06',
+        approvedBy: 'seed@system',
+        remarks: 'Financial assistance approved',
+      },
+    });
+    await prisma.studentConcession.create({
+      data: {
+        studentId: allStudents[4]!.id,
+        concessionId: concessions[2]!.id,
+        feeHeadId: examHead.id,
+        startMonth: '2024-08',
+        endMonth: '2025-06',
+        approvedBy: 'seed@system',
+      },
+    });
+    await prisma.studentConcession.create({
+      data: {
+        studentId: allStudents[4]!.id,
+        concessionId: concessions[2]!.id,
+        feeHeadId: libraryHead.id,
+        startMonth: '2024-08',
+        endMonth: '2025-06',
+        approvedBy: 'seed@system',
+      },
+    });
+    await prisma.studentConcession.create({
+      data: {
+        studentId: allStudents[6]!.id,
+        concessionId: concessions[3]!.id, // Staff Child
+        feeHeadId: tuitionHead.id,
+        startMonth: '2024-08',
+        endMonth: '2025-06',
+        approvedBy: 'seed@system',
+        remarks: 'Child of staff member',
+      },
+    });
+  }
+
+  console.log('Creating bounce fee rule...');
+  await prisma.bounceFeeRule.create({
+    data: {
+      name: 'Standard Cheque Bounce Fee',
+      fee: 500,
+      isActive: true,
+    },
+  });
+
+  console.log('Creating defaulter alerts for students with overdue vouchers...');
+  const overdueVouchers = await prisma.voucher.findMany({
+    where: { status: 'PENDING' },
+    include: { student: true },
+    take: 5,
+  });
+  for (const v of overdueVouchers) {
+    const overdueDays = Math.floor((Date.now() - v.dueDate.getTime()) / (1000 * 60 * 60 * 24));
+    await prisma.defaulterAlert.create({
+      data: {
+        studentId: v.studentId,
+        sessionId: session2024.id,
+        overdueDays: Math.max(overdueDays, 15),
+        amountDue: v.amount,
+        alertLevel: overdueDays > 60 ? AlertLevel.RED : overdueDays > 30 ? AlertLevel.ORANGE : AlertLevel.YELLOW,
+        status: AlertStatus.ACTIVE,
+      },
+    });
+  }
+
+  console.log('Running daily aggregation refresh...');
+  await prisma.$executeRawUnsafe("SELECT refresh_daily_aggregation(CURRENT_DATE)");
+
   const studentCount = await prisma.student.count();
   const classCount = await prisma.class.count();
   const sessionCount = await prisma.session.count();
@@ -349,17 +502,25 @@ async function main() {
   const promotionCount = await prisma.promotion.count();
   const feeStructureCount = await prisma.feeStructure.count();
   const feeHeadCount = await prisma.feeHead.count();
+  const concessionCount = await prisma.feeConcession.count();
+  const studentConcessionCount = await prisma.studentConcession.count();
+  const defaulterAlertCount = await prisma.defaulterAlert.count();
+  const bounceRuleCount = await prisma.bounceFeeRule.count();
 
   console.log('\n========================================');
   console.log('Seed Complete');
   console.log('========================================');
-  console.log(`  Sessions:       ${sessionCount}`);
-  console.log(`  Classes:        ${classCount}`);
-  console.log(`  Students:       ${studentCount}`);
-  console.log(`  Promotions:     ${promotionCount}`);
-  console.log(`  Vouchers:       ${voucherCountTotal}`);
-  console.log(`  Fee Heads:      ${feeHeadCount}`);
-  console.log(`  Fee Structures: ${feeStructureCount}`);
+  console.log(`  Sessions:           ${sessionCount}`);
+  console.log(`  Classes:            ${classCount}`);
+  console.log(`  Students:           ${studentCount}`);
+  console.log(`  Promotions:         ${promotionCount}`);
+  console.log(`  Vouchers:           ${voucherCountTotal}`);
+  console.log(`  Fee Heads:          ${feeHeadCount}`);
+  console.log(`  Fee Structures:     ${feeStructureCount}`);
+  console.log(`  Fee Concessions:    ${concessionCount}`);
+  console.log(`  Student Concessions:${studentConcessionCount}`);
+  console.log(`  Defaulter Alerts:   ${defaulterAlertCount}`);
+  console.log(`  Bounce Fee Rules:   ${bounceRuleCount}`);
   console.log('========================================\n');
 }
 

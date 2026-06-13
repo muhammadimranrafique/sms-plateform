@@ -44,3 +44,10 @@ export const recalculateVoucherStatus = async (req: AuthRequest, res: Response) 
   const result = await recalculateVoucher(voucherNo, req.user!);
   res.json(ok(result));
 };
+
+export const printByVoucherNo = async (req: AuthRequest, res: Response) => {
+  const voucherNo = req.params.voucherNo as string;
+  const result = await service.getVoucherByVoucherNo(voucherNo);
+  res.json(ok(result));
+};
+

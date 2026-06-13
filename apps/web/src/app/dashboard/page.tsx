@@ -1,6 +1,8 @@
+import { Suspense } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { publicEnv } from '@/lib/env';
 import { StatsGrid } from '@/components/dashboard/StatsGrid';
+import { FeeDashboardClient } from '@/components/dashboard/FeeDashboardClient';
 
 interface DashboardStats {
   totalStudents: number;
@@ -11,9 +13,7 @@ interface DashboardStats {
 
 async function getStats(): Promise<DashboardStats | null> {
   const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const { data: { session } } = await supabase.auth.getSession();
   if (!session) return null;
   try {
     const res = await fetch(`${publicEnv.NEXT_PUBLIC_API_URL}/api/v1/reports/dashboard`, {
@@ -37,6 +37,9 @@ export default async function DashboardPage() {
         <p className="text-sm text-slate-500">Overview of your school at a glance.</p>
       </div>
       <StatsGrid stats={stats} />
+      <Suspense fallback={<div className="card h-96 animate-pulse p-5" />}>
+        <FeeDashboardClient />
+      </Suspense>
     </div>
   );
 }

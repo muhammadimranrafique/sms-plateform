@@ -347,6 +347,31 @@ export async function reversePayment(paymentId: number, dto: ReversePaymentDto, 
       });
     }
 
+    if (dto.reverseReason === 'CHEQUE_BOUNCE') {
+      const bounceRule = await tx.bounceFeeRule.findFirst({ where: { isActive: true } });
+      if (bounceRule) {
+        let bounceHead = await tx.feeHead.findFirst({ where: { code: 'BOUNCE_FEE' } });
+        if (!bounceHead) {
+          bounceHead = await tx.feeHead.create({
+            data: { name: 'Cheque Bounce Fee', code: 'BOUNCE_FEE', sortOrder: 999 },
+          });
+        }
+
+        const currentSession = await tx.session.findFirst({ where: { isCurrent: true } });
+        await tx.feeCharge.create({
+          data: {
+            studentId: payment.studentId,
+            feeHeadId: bounceHead.id,
+            sessionId: currentSession?.id ?? 0,
+            feeMonth: new Date().toISOString().slice(0, 7),
+            amount: bounceRule.fee,
+            dueDate: new Date(),
+            fine: 0,
+          },
+        });
+      }
+    }
+
     await tx.payment.update({
       where: { id: paymentId },
       data: {
