@@ -94,57 +94,57 @@ export async function promoteSingle(dto: SinglePromotionDto, user: Actor) {
   if (!targetSession) throw new NotFoundError('Target session');
 
   try {
-    return prisma.$transaction(
-      async (tx) => {
-        await tx.$executeRawUnsafe(`SET LOCAL app.user_id = '${user.id}'`);
-        await tx.$executeRawUnsafe(`SET LOCAL app.username = '${user.email.replace(/'/g, "''")}'`);
+    return await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL app.user_id = '${user.id}'`);
+      await tx.$executeRawUnsafe(`SET LOCAL app.username = '${user.email.replace(/'/g, "''")}'`);
 
-        const student = await tx.student.findFirst({
-          where: { id: dto.studentId, deletedAt: null },
-          select: { id: true, classId: true, sessionId: true },
-        });
-        if (!student) throw new BadRequestError('Student not found or inactive');
+      const student = await tx.student.findFirst({
+        where: { id: dto.studentId, deletedAt: null },
+        select: { id: true, classId: true, sessionId: true },
+      });
+      if (!student) throw new BadRequestError('Student not found or inactive');
 
-        if (student.classId === dto.newClassId && student.sessionId === dto.newSessionId) {
-          throw new BadRequestError('Student is already in the target class and session');
-        }
+      if (student.classId === dto.newClassId && student.sessionId === dto.newSessionId) {
+        throw new BadRequestError('Student is already in the target class and session');
+      }
 
-        await tx.promotionBatch.create({
-          data: {
-            id: dto.idempotencyKey,
-            status: 'EXECUTED',
-            promotedBy: user.email,
-            remarks: dto.remarks,
-          },
-        });
+      await tx.promotionBatch.create({
+        data: {
+          id: dto.idempotencyKey,
+          status: 'EXECUTED',
+          promotedBy: user.email,
+          remarks: dto.remarks,
+        },
+      });
 
-        await tx.promotion.create({
-          data: {
-            studentId: student.id,
-            oldClassId: student.classId,
-            oldSessionId: student.sessionId,
-            newClassId: dto.newClassId,
-            newSessionId: dto.newSessionId,
-            promotedBy: user.email,
-            batchId: dto.idempotencyKey,
-            remarks: dto.remarks,
-          },
-        });
+      await tx.promotion.create({
+        data: {
+          studentId: student.id,
+          oldClassId: student.classId,
+          oldSessionId: student.sessionId,
+          newClassId: dto.newClassId,
+          newSessionId: dto.newSessionId,
+          promotedBy: user.email,
+          batchId: dto.idempotencyKey,
+          remarks: dto.remarks,
+        },
+      });
 
-        await tx.student.update({
-          where: { id: student.id },
-          data: { classId: dto.newClassId, sessionId: dto.newSessionId },
-        });
+      await tx.student.update({
+        where: { id: student.id },
+        data: { classId: dto.newClassId, sessionId: dto.newSessionId },
+      });
 
-        return { batchId: dto.idempotencyKey, promoted: 1, idempotentReplay: false };
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+      return { batchId: dto.idempotencyKey, promoted: 1, idempotentReplay: false };
+    });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       throw new ConflictError('Student was already promoted for this session');
     }
-    throw err;
+    if (err instanceof BadRequestError || err instanceof NotFoundError) {
+      throw err;
+    }
+    throw new Error(`Promotion failed: ${(err as Error).message}`);
   }
 }
 
@@ -205,60 +205,63 @@ export async function promoteStudents(dto: PromotionDto, user: Actor) {
   if (!targetSession) throw new NotFoundError('Target session');
 
   try {
-    const result = await prisma.$transaction(
-      async (tx) => {
-        await tx.$executeRawUnsafe(`SET LOCAL app.user_id = '${user.id}'`);
-        await tx.$executeRawUnsafe(`SET LOCAL app.username = '${user.email.replace(/'/g, "''")}'`);
+    return await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL app.user_id = '${user.id}'`);
+      await tx.$executeRawUnsafe(`SET LOCAL app.username = '${user.email.replace(/'/g, "''")}'`);
 
-        const students = await tx.student.findMany({
-          where: { id: { in: dto.studentIds }, deletedAt: null },
-          select: { id: true, classId: true, sessionId: true },
-        });
-        if (students.length !== dto.studentIds.length) {
-          throw new BadRequestError('One or more students were not found or are inactive');
-        }
+      const students = await tx.student.findMany({
+        where: { id: { in: dto.studentIds }, deletedAt: null },
+        select: { id: true, classId: true, sessionId: true },
+      });
+      if (students.length !== dto.studentIds.length) {
+        throw new BadRequestError('One or more students were not found or are inactive');
+      }
 
-        await tx.promotionBatch.create({
-          data: {
-            id: dto.idempotencyKey,
-            status: 'EXECUTED',
-            promotedBy: user.email,
-            remarks: dto.remarks,
-          },
-        });
+      const toPromote = students.filter(
+        (s) => s.classId !== dto.newClassId || s.sessionId !== dto.newSessionId,
+      );
 
-        let promoted = 0;
-        for (const s of students) {
-          if (s.classId === dto.newClassId && s.sessionId === dto.newSessionId) continue;
+      await tx.promotionBatch.create({
+        data: {
+          id: dto.idempotencyKey,
+          status: 'EXECUTED',
+          promotedBy: user.email,
+          remarks: dto.remarks,
+        },
+      });
 
-          await tx.promotion.create({
-            data: {
-              studentId: s.id,
-              oldClassId: s.classId,
-              oldSessionId: s.sessionId,
-              newClassId: dto.newClassId,
-              newSessionId: dto.newSessionId,
-              promotedBy: user.email,
-              batchId: dto.idempotencyKey,
-              remarks: dto.remarks,
-            },
-          });
-          await tx.student.update({
-            where: { id: s.id },
-            data: { classId: dto.newClassId, sessionId: dto.newSessionId },
-          });
-          promoted++;
-        }
-        return { batchId: dto.idempotencyKey, promoted, idempotentReplay: false };
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
-    return result;
+      if (toPromote.length === 0) {
+        return { batchId: dto.idempotencyKey, promoted: 0, idempotentReplay: false };
+      }
+
+      await tx.promotion.createMany({
+        data: toPromote.map((s) => ({
+          studentId: s.id,
+          oldClassId: s.classId,
+          oldSessionId: s.sessionId,
+          newClassId: dto.newClassId,
+          newSessionId: dto.newSessionId,
+          promotedBy: user.email,
+          batchId: dto.idempotencyKey,
+          remarks: dto.remarks,
+        })),
+      });
+
+      await tx.student.updateMany({
+        where: { id: { in: toPromote.map((s) => s.id) } },
+        data: { classId: dto.newClassId, sessionId: dto.newSessionId },
+      });
+
+      return { batchId: dto.idempotencyKey, promoted: toPromote.length, idempotentReplay: false };
+    });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       throw new ConflictError('One or more students were already promoted for this session');
     }
-    throw err;
+    if (err instanceof BadRequestError || err instanceof NotFoundError) {
+      throw err;
+    }
+    throw new Error(`Bulk promotion failed: ${(err as Error).message}`);
   }
 }
 
@@ -313,6 +316,18 @@ export async function rollbackBatch(batchId: string, user: Actor) {
 // ---- Existing ----
 
 export async function listPromotions(q: PromotionQuery) {
+  if (q.groupBy === 'batch') {
+    const [data, total] = await prisma.$transaction([
+      prisma.promotionBatch.findMany({
+        include: { _count: { select: { promotions: true } } },
+        orderBy: { executedAt: 'desc' },
+        ...toSkipTake(q.page, q.limit),
+      }),
+      prisma.promotionBatch.count(),
+    ]);
+    return paginate(data, total, q.page, q.limit);
+  }
+
   const where: Prisma.PromotionWhereInput = {
     ...(q.studentId && { studentId: q.studentId }),
     ...(q.newClassId && { newClassId: q.newClassId }),

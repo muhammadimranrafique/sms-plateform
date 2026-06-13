@@ -9,6 +9,9 @@ export function formatCurrency(amount: number, currency = 'PKR') {
   return new Intl.NumberFormat('en-PK', { style: 'currency', currency }).format(amount);
 }
 
-export function formatDate(date: string | Date) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date(date));
+export function formatDate(date: string | Date | null | undefined) {
+  if (!date) return '—';
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(d);
 }

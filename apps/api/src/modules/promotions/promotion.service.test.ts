@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockTx = {
   $executeRawUnsafe: vi.fn(),
-  student: { findMany: vi.fn(), update: vi.fn() },
-  promotion: { create: vi.fn() },
+  student: { findMany: vi.fn(), updateMany: vi.fn() },
+  promotion: { createMany: vi.fn() },
+  promotionBatch: { create: vi.fn() },
 };
 const mockPrisma = {
   promotion: { findFirst: vi.fn(), count: vi.fn() },
@@ -45,16 +46,12 @@ describe('promoteStudents', () => {
     ]);
     const res = await service.promoteStudents(dto as never, actor);
     expect(res.promoted).toBe(2);
-    expect(mockTx.promotion.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ oldClassId: 3, oldSessionId: 1 }),
-      }),
-    );
-    expect(mockTx.promotion.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ oldClassId: 4, oldSessionId: 1 }),
-      }),
-    );
+    expect(mockTx.promotion.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({ oldClassId: 3, oldSessionId: 1 }),
+        expect.objectContaining({ oldClassId: 4, oldSessionId: 1 }),
+      ]),
+    });
   });
 
   it('throws when a student is missing/inactive', async () => {

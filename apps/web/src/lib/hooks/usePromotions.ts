@@ -12,7 +12,7 @@ export interface PromotionRow {
   newClassId: number;
   newSessionId: number;
   batchId: string | null;
-  createdAt: string;
+  promotedAt: string;
   student?: { name: string; admissionNo: string };
   oldClass?: { name: string };
   newClass?: { name: string };
@@ -23,24 +23,18 @@ export interface PromotionRow {
 export interface PromotionBatchRow {
   id: string;
   status: string;
-  createdAt: string;
+  executedAt: string;
   revertedAt: string | null;
   _count: { promotions: number };
 }
 
 export interface BulkPreviewItem {
   studentId: number;
-  name: string;
+  studentName: string;
   admissionNo: string;
   currentClass: string;
   eligible: boolean;
   reasons: string[];
-}
-
-export interface BulkPreviewResult {
-  items: BulkPreviewItem[];
-  totalEligible: number;
-  totalDetained: number;
 }
 
 const keys = {
@@ -69,7 +63,7 @@ export function usePromoteSingle() {
 
 export function useBulkPreview() {
   return useMutation({
-    mutationFn: (dto: BulkPromotionPreviewDto) => api.post<BulkPreviewResult>('/promotions/bulk/preview', dto),
+    mutationFn: (dto: BulkPromotionPreviewDto) => api.post<BulkPreviewItem[]>('/promotions/bulk/preview', dto),
   });
 }
 

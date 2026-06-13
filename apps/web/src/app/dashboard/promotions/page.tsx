@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { SinglePromotionSchema, type SinglePromotionDto, type BulkPromotionExecuteDto } from '@sms/types';
+import { z } from 'zod';
+import { SinglePromotionSchema, type BulkPromotionExecuteDto } from '@sms/types';
 import { usePromoteSingle, useBulkPreview, useBulkExecute, usePromotionBatches, useRollbackBatch, usePromotions } from '@/lib/hooks/usePromotions';
 import { usePromotionRules } from '@/lib/hooks/usePromotionRules';
 import { useStudents } from '@/lib/hooks/useStudents';
@@ -17,6 +18,8 @@ import { ApiError } from '@/lib/api/client';
 import { formatDate } from '@/lib/utils';
 import { RotateCcw } from 'lucide-react';
 
+const SinglePromotionFormSchema = SinglePromotionSchema.omit({ idempotencyKey: true });
+
 function uuid() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
@@ -26,7 +29,7 @@ type Tab = 'single' | 'bulk' | 'history';
 export default function PromotionsPage() {
   const [tab, setTab] = useState<Tab>('single');
 
-  const { data: classes } = useClasses();
+  const { data: classes, isLoading: classesLoading, error: classesError } = useClasses();
   const { data: sessions } = useSessions();
   const { data: students, isLoading: studentsLoading } = useStudents({ limit: 100 });
   const { data: rules } = usePromotionRules();
@@ -41,12 +44,12 @@ export default function PromotionsPage() {
   const [fromSessionId, setFromSessionId] = useState<number>();
   const [toSessionId, setToSessionId] = useState<number>();
   const [ruleId, setRuleId] = useState<number>();
-  const [preview, setPreview] = useState<{ items: any[]; totalEligible: number; totalDetained: number } | null>(null);
+  const [preview, setPreview] = useState<any[] | null>(null);
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
   const [newClassId, setNewClassId] = useState<number>();
 
-  const singleForm = useForm<SinglePromotionDto>({
-    resolver: zodResolver(SinglePromotionSchema),
+  const singleForm = useForm<z.infer<typeof SinglePromotionFormSchema>>({
+    resolver: zodResolver(SinglePromotionFormSchema),
   });
 
   function toggleStudent(id: number) {
@@ -63,7 +66,8 @@ export default function PromotionsPage() {
     try {
       const result = await bulkPreview.mutateAsync({ fromSessionId, toSessionId, ruleId });
       setPreview(result);
-      setSelectedStudentIds(result.items.filter((i) => i.eligible).map((i) => i.studentId));
+      setSelectedStudentIds(result.filter((i: any) => i.eligible).map((i: any) => i.studentId));
+      setNewClassId(undefined);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Preview failed');
     }
@@ -86,12 +90,13 @@ export default function PromotionsPage() {
       toast.success(`Promoted ${result.promoted} student(s)`);
       setPreview(null);
       setSelectedStudentIds([]);
+      setNewClassId(undefined);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Bulk promotion failed');
     }
   }
 
-  async function handleSingle(data: SinglePromotionDto) {
+  async function handleSingle(data: z.infer<typeof SinglePromotionFormSchema>) {
     try {
       await promoteSingle.mutateAsync({ ...data, idempotencyKey: uuid() });
       toast.success('Student promoted');
@@ -224,21 +229,30 @@ export default function PromotionsPage() {
             <div className="space-y-4">
               <div className="flex gap-4 text-sm">
                 <span className="rounded-full bg-green-100 px-3 py-1 text-green-700">
-                  Eligible: {preview.totalEligible}
+                  Eligible: {preview.filter((i: any) => i.eligible).length}
                 </span>
                 <span className="rounded-full bg-red-100 px-3 py-1 text-red-700">
-                  Detained: {preview.totalDetained}
+                  Detained: {preview.filter((i: any) => !i.eligible).length}
                 </span>
               </div>
 
               <div>
                 <label className="text-sm font-medium">Target Class for Promotion</label>
-                <select className="input mt-1 max-w-xs" value={newClassId ?? ''} onChange={(e) => setNewClassId(e.target.value ? Number(e.target.value) : undefined)}>
-                  <option value="">Select class...</option>
-                  {classes?.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>
-                  ))}
-                </select>
+                {classesError ? (
+                  <p className="mt-1 text-xs text-red-500">Failed to load classes. Refresh to retry.</p>
+                ) : (
+                  <select
+                    className="input mt-1 max-w-xs"
+                    value={newClassId ?? ''}
+                    onChange={(e) => setNewClassId(e.target.value ? Number(e.target.value) : undefined)}
+                    disabled={classesLoading}
+                  >
+                    <option value="">{classesLoading ? 'Loading classes...' : 'Select class...'}</option>
+                    {classes?.filter((c) => c.isActive).map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="card overflow-x-auto p-0">
@@ -248,10 +262,10 @@ export default function PromotionsPage() {
                       <th className="px-4 py-3 w-10">
                         <input
                           type="checkbox"
-                          checked={selectedStudentIds.length === preview.items.length}
+                          checked={selectedStudentIds.length === preview.length}
                           onChange={() => {
-                            if (selectedStudentIds.length === preview.items.length) setSelectedStudentIds([]);
-                            else setSelectedStudentIds(preview.items.map((i) => i.studentId));
+                            if (selectedStudentIds.length === preview.length) setSelectedStudentIds([]);
+                            else setSelectedStudentIds(preview.map((i: any) => i.studentId));
                           }}
                           className="h-4 w-4"
                         />
@@ -264,7 +278,7 @@ export default function PromotionsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.items.map((item) => (
+                    {preview.map((item: any) => (
                       <tr key={item.studentId} className={`border-b border-slate-50 hover:bg-slate-50 ${!item.eligible ? 'bg-red-50/50' : ''}`}>
                         <td className="px-4 py-3">
                           <input
@@ -275,7 +289,7 @@ export default function PromotionsPage() {
                           />
                         </td>
                         <td className="px-4 py-3 font-mono text-xs">{item.admissionNo}</td>
-                        <td className="px-4 py-3 font-medium">{item.name}</td>
+                        <td className="px-4 py-3 font-medium">{item.studentName}</td>
                         <td className="px-4 py-3 text-slate-500">{item.currentClass}</td>
                         <td className="px-4 py-3">
                           {item.eligible
@@ -329,7 +343,7 @@ export default function PromotionsPage() {
                       <td className="px-4 py-3 font-mono text-xs">{b.id.slice(0, 8)}...</td>
                       <td className="px-4 py-3">{b._count.promotions}</td>
                       <td className="px-4 py-3"><Badge value={b.status} /></td>
-                      <td className="px-4 py-3 text-slate-500">{formatDate(b.createdAt)}</td>
+                      <td className="px-4 py-3 text-slate-500">{formatDate(b.executedAt)}</td>
                       <td className="px-4 py-3 text-slate-500">{b.revertedAt ? formatDate(b.revertedAt) : '—'}</td>
                       <td className="px-4 py-3">
                         {b.status === 'EXECUTED' && (
@@ -377,7 +391,7 @@ export default function PromotionsPage() {
                       <td className="px-4 py-3 text-slate-500">
                         {p.newClass?.name ?? '?'} ({p.newSession?.name ?? '?'})
                       </td>
-                      <td className="px-4 py-3 text-slate-500">{formatDate(p.createdAt)}</td>
+                      <td className="px-4 py-3 text-slate-500">{formatDate(p.promotedAt)}</td>
                     </tr>
                   ))}
                   {history && history.length === 0 && (

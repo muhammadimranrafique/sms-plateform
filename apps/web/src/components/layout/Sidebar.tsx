@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, GraduationCap, Receipt, ArrowUpDown, DollarSign, Percent } from 'lucide-react';
+import { LayoutDashboard, Users, GraduationCap, Receipt, ArrowUpDown, DollarSign, Percent, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const nav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/students', label: 'Students', icon: Users },
   { href: '/dashboard/classes', label: 'Classes', icon: GraduationCap },
+  { href: '/dashboard/sessions', label: 'Sessions', icon: Calendar },
   { href: '/dashboard/promotions', label: 'Promotions', icon: ArrowUpDown },
   { href: '/dashboard/vouchers', label: 'Vouchers', icon: Receipt },
   { href: '/dashboard/fee-structures', label: 'Fee Structures', icon: DollarSign },

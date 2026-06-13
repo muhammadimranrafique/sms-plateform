@@ -14,6 +14,7 @@ export const PromotionQuerySchema = z.object({
   studentId: z.coerce.number().int().positive().optional(),
   newClassId: z.coerce.number().int().positive().optional(),
   newSessionId: z.coerce.number().int().positive().optional(),
+  groupBy: z.enum(['batch']).optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
