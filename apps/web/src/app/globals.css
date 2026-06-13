@@ -28,3 +28,336 @@ body {
     @apply btn border border-slate-200 bg-white hover:bg-slate-50;
   }
 }
+
+/* ===== Voucher Print Styles ===== */
+
+.print-container {
+  width: 210mm;
+  background: white;
+  font-family: 'Inter', 'Helvetica', 'Arial', sans-serif;
+}
+
+.voucher-copy {
+  width: 210mm;
+  height: 99mm;
+  position: relative;
+  overflow: hidden;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.voucher-content {
+  padding: 4mm 6mm;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Perforation line */
+.perforation-line {
+  text-align: center;
+  color: #999;
+  font-size: 3pt;
+  letter-spacing: 1px;
+  line-height: 3mm;
+  border-top: 0.1mm dashed #aaa;
+  user-select: none;
+}
+
+.perforation-text {
+  display: block;
+  margin-top: -1.5mm;
+}
+
+/* Header */
+.voucher-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 3mm;
+  border-bottom: 0.3mm solid #333;
+  padding-bottom: 2mm;
+  margin-bottom: 2mm;
+}
+
+.school-logo-placeholder {
+  width: 12mm;
+  height: 12mm;
+  border: 0.2mm solid #ccc;
+  border-radius: 1mm;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 5pt;
+  color: #999;
+}
+
+.school-info {
+  flex: 1;
+}
+
+.school-name {
+  font-size: 11pt;
+  font-weight: 700;
+  color: #1A3C5E;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.school-address {
+  font-size: 6.5pt;
+  color: #555;
+  margin: 0.5mm 0 0;
+}
+
+.school-contact {
+  font-size: 6pt;
+  color: #777;
+  margin: 0.3mm 0 0;
+}
+
+.session-label {
+  font-size: 6.5pt;
+  font-weight: 600;
+  color: #333;
+  margin: 0.5mm 0 0;
+}
+
+.copy-label-badge {
+  font-size: 6pt;
+  font-weight: 700;
+  color: #1A3C5E;
+  border: 0.2mm solid #1A3C5E;
+  padding: 0.5mm 2mm;
+  border-radius: 0.5mm;
+  white-space: nowrap;
+}
+
+/* Voucher Meta */
+.voucher-meta {
+  margin-bottom: 2mm;
+  font-size: 7pt;
+}
+
+.meta-row {
+  display: flex;
+  gap: 2mm;
+  margin-bottom: 0.5mm;
+}
+
+.meta-label {
+  color: #666;
+  min-width: 18mm;
+  font-weight: 500;
+}
+
+.meta-value {
+  font-weight: 600;
+  color: #222;
+  min-width: 25mm;
+}
+
+/* Fee Table */
+.fee-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 7pt;
+  margin-bottom: 1.5mm;
+  flex-shrink: 1;
+}
+
+.fee-table th {
+  background: #f0f2f5;
+  font-weight: 600;
+  color: #333;
+  text-align: left;
+  padding: 0.8mm 1mm;
+  border: 0.2mm solid #ccc;
+  font-size: 6.5pt;
+}
+
+.fee-table td {
+  padding: 0.6mm 1mm;
+  border: 0.2mm solid #ddd;
+  font-size: 6.5pt;
+}
+
+.fee-table tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+
+.col-sr { width: 6%; text-align: center; }
+.col-desc { width: 34%; }
+.col-amount { width: 15%; text-align: right; }
+.col-discount { width: 12%; text-align: right; }
+.col-fine { width: 12%; text-align: right; }
+.col-net { width: 15%; text-align: right; }
+
+.totals-row td {
+  font-weight: 700;
+  border-top: 0.3mm solid #333;
+  background: #f5f7fa;
+  font-size: 7pt;
+}
+
+.grand-total {
+  font-size: 8pt;
+}
+
+.totals-label {
+  font-size: 7pt;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Amount in words */
+.amount-in-words {
+  font-size: 5.5pt;
+  color: #555;
+  margin: 0;
+  font-style: italic;
+  flex-shrink: 0;
+}
+
+/* QR section */
+.qr-section {
+  position: absolute;
+  bottom: 5mm;
+  right: 6mm;
+  text-align: center;
+}
+
+.qr-code {
+  width: 16mm;
+  height: 16mm;
+  display: block;
+}
+
+.verification-text {
+  font-size: 4.5pt;
+  color: #999;
+  margin-top: 0.3mm;
+}
+
+/* Watermark */
+.watermark {
+  position: absolute;
+  top: 35mm;
+  left: 55mm;
+  transform: rotate(-30deg);
+  font-size: 28pt;
+  font-weight: 900;
+  opacity: 0.13;
+  pointer-events: none;
+  white-space: pre-line;
+  text-align: center;
+  z-index: 10;
+  letter-spacing: 3mm;
+}
+
+.watermark-paid {
+  color: #006600;
+}
+
+.watermark-overdue {
+  color: #cc0000;
+}
+
+/* Footer */
+.voucher-footer {
+  position: absolute;
+  bottom: 4mm;
+  left: 6mm;
+  right: 6mm;
+  text-align: center;
+  font-size: 5.5pt;
+  color: #999;
+  border-top: 0.2mm solid #ddd;
+  padding-top: 1mm;
+}
+
+.voucher-footer p {
+  margin: 0;
+}
+
+/* ===== Print-Only Rules ===== */
+
+@media print {
+  html, body {
+    width: 210mm;
+    height: 297mm;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  nav, header, footer, .no-print,
+  .sidebar, .toast, .fixed, .sticky:not(.preview-controls *) {
+    display: none !important;
+  }
+
+  .print-container {
+    width: 210mm;
+  }
+
+  .voucher-copy {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    height: 99mm;
+    width: 210mm;
+  }
+
+  .watermark {
+    opacity: 0.12 !important;
+  }
+
+  .fee-table th,
+  .fee-table td {
+    border-color: #333 !important;
+  }
+
+  .school-name {
+    color: black !important;
+  }
+
+  .copy-label-badge {
+    border-color: black !important;
+    color: black !important;
+  }
+
+  .preview-area {
+    box-shadow: none !important;
+  }
+}
+
+/* ===== Monochrome-safe overrides ===== */
+
+.voucher-copy * {
+  border-color: #555;
+}
+
+.fee-table th,
+.fee-table td {
+  background: transparent;
+}
+
+.fee-table th {
+  font-weight: 700;
+  border-bottom-width: 0.3mm;
+}
+
+.fee-table tbody tr:nth-child(even) {
+  background: #f5f5f5;
+}
+
+.totals-row td {
+  border-top-width: 0.3mm;
+  border-bottom: 0.3mm double #333;
+}

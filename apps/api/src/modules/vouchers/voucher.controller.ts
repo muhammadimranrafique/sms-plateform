@@ -2,6 +2,7 @@ import type { Response } from 'express';
 import type { AuthRequest } from '../../middleware/auth.middleware';
 import { ok, created } from '../../shared/response';
 import * as service from './voucher.service';
+import { getVoucherStatus, recalculateVoucher } from '../payments/payment.service';
 
 export const list = async (req: AuthRequest, res: Response) => {
   const result = await service.listVouchers(req.query as never);
@@ -30,4 +31,16 @@ export const generateAllMonths = async (req: AuthRequest, res: Response) => {
 
 export const updateStatus = async (req: AuthRequest, res: Response) => {
   res.json(ok(await service.updateVoucherStatus(Number(req.params.id), req.body, req.user!)));
+};
+
+export const getStatusByVoucherNo = async (req: AuthRequest, res: Response) => {
+  const voucherNo = req.params.voucherNo as string;
+  const result = await getVoucherStatus(voucherNo);
+  res.json(ok(result));
+};
+
+export const recalculateVoucherStatus = async (req: AuthRequest, res: Response) => {
+  const voucherNo = req.params.voucherNo as string;
+  const result = await recalculateVoucher(voucherNo, req.user!);
+  res.json(ok(result));
 };

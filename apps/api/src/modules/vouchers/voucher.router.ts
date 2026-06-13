@@ -30,3 +30,14 @@ voucherRouter.patch(
   validate(UpdateVoucherStatusSchema),
   ctrl.updateStatus,
 );
+
+voucherRouter.get(
+  '/by-voucher-no/:voucherNo/status',
+  ctrl.getStatusByVoucherNo,
+);
+
+voucherRouter.patch(
+  '/by-voucher-no/:voucherNo/recalculate',
+  rbac('admin', 'staff'),
+  ctrl.recalculateVoucherStatus,
+);

@@ -11,3 +11,5 @@ export * from './fee-structure.schema';
 export * from './fee-charge.schema';
 export * from './fee-payment.schema';
 export * from './discount.schema';
+export * from './payment.schema';
+export * from './student-ledger.schema';

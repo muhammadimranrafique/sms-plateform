@@ -19,6 +19,7 @@ model Session {
   newPromos Promotion[] @relation("NewSession")
   feeStructures FeeStructure[]
   feeCharges FeeCharge[]
+  lateFineRules LateFineRule[]
   promotionRules PromotionRule[]
   createdAt DateTime    @default(now())
 
@@ -62,6 +63,8 @@ model Student {
   promotions  Promotion[]
   vouchers    Voucher[]
   feeCharges  FeeCharge[]
+  payments    Payment[]
+  studentLedger StudentLedger?
   discounts   Discount[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -130,23 +133,91 @@ model FeeCharge {
   studentId  Int
   feeHeadId  Int
   sessionId  Int
+  voucherId  Int?
   feeMonth   String
   amount     Decimal      @db.Decimal(10, 2)
   dueDate    DateTime
   fine       Decimal      @default(0) @db.Decimal(10, 2)
   paidAmount Decimal      @default(0) @db.Decimal(10, 2)
   status     ChargeStatus @default(UNPAID)
+  version    Int          @default(0)
   student    Student      @relation(fields: [studentId], references: [id])
   feeHead    FeeHead      @relation(fields: [feeHeadId], references: [id])
   session    Session      @relation(fields: [sessionId], references: [id])
+  voucher    Voucher?     @relation(fields: [voucherId], references: [id])
   payments   FeePayment[]
+  allocations PaymentAllocation[]
   createdAt  DateTime     @default(now())
 
   @@index([studentId, sessionId])
   @@index([feeMonth])
   @@index([feeHeadId])
+  @@index([voucherId])
   @@index([studentId, sessionId, dueDate])
   @@map("fee_charges")
+}
+
+model LateFineRule {
+  id        Int          @id @default(autoincrement())
+  sessionId Int
+  name      String
+  graceDays Int          @default(0)
+  type      LateFineType @default(FIXED)
+  value     Decimal      @db.Decimal(10, 2)
+  maxFine   Decimal?     @db.Decimal(10, 2)
+  isActive  Boolean      @default(true)
+  session   Session      @relation(fields: [sessionId], references: [id])
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([sessionId])
+  @@map("late_fine_rules")
+}
+
+model Payment {
+  id          Int              @id @default(autoincrement())
+  studentId   Int
+  amount      Decimal          @db.Decimal(10, 2)
+  method      FeePaymentMethod
+  referenceNo String?
+  paidAt      DateTime
+  receivedBy  String?
+  status      PaymentStatus    @default(COMPLETED)
+  reversedAt  DateTime?
+  reversedBy  String?
+  remarks     String?
+  student     Student          @relation(fields: [studentId], references: [id])
+  allocations PaymentAllocation[]
+  createdAt   DateTime         @default(now())
+
+  @@index([studentId])
+  @@index([studentId, paidAt])
+  @@map("payments")
+}
+
+model PaymentAllocation {
+  id          Int       @id @default(autoincrement())
+  paymentId   Int
+  feeChargeId Int
+  amount      Decimal   @db.Decimal(10, 2)
+  finePaid    Decimal   @default(0) @db.Decimal(10, 2)
+  payment     Payment   @relation(fields: [paymentId], references: [id])
+  feeCharge   FeeCharge @relation(fields: [feeChargeId], references: [id])
+
+  @@unique([paymentId, feeChargeId])
+  @@index([feeChargeId])
+  @@map("payment_allocations")
+}
+
+model StudentLedger {
+  id        Int      @id @default(autoincrement())
+  studentId Int      @unique
+  advance   Decimal  @default(0) @db.Decimal(10, 2)
+  student   Student  @relation(fields: [studentId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("student_ledgers")
 }
 
 model FeePayment {
@@ -258,6 +329,7 @@ model Voucher {
   printedBy   String?
   student     Student        @relation(fields: [studentId], references: [id])
   lines       VoucherLine[]
+  feeCharges  FeeCharge[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
@@ -339,6 +411,16 @@ enum FeePaymentMethod {
   BANK_TRANSFER
   CHEQUE
   ONLINE
+}
+
+enum PaymentStatus {
+  COMPLETED
+  REVERSED
+}
+
+enum LateFineType {
+  FIXED
+  PERCENTAGE
 }
 
 enum DiscountType {

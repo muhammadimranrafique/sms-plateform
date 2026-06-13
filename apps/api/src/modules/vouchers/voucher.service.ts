@@ -150,19 +150,7 @@ export async function generateVoucher(dto: GenerateVoucherDto, user: Actor) {
 
     const computed = await computeVoucherAmounts(dto.studentId, student.sessionId, student.classId, dto.feeMonth, dto.dueDate, tx);
 
-    await tx.feeCharge.createMany({
-      data: computed.lines.map((l) => ({
-        studentId: dto.studentId,
-        feeHeadId: l.feeHeadId,
-        sessionId: student.sessionId,
-        feeMonth: dto.feeMonth,
-        amount: l.amount,
-        dueDate: dto.dueDate,
-        fine,
-      })),
-    });
-
-    return tx.voucher.create({
+    const voucher = await tx.voucher.create({
       data: {
         voucherNo,
         studentId: dto.studentId,
@@ -182,6 +170,23 @@ export async function generateVoucher(dto: GenerateVoucherDto, user: Actor) {
           })),
         },
       },
+    });
+
+    await tx.feeCharge.createMany({
+      data: computed.lines.map((l) => ({
+        studentId: dto.studentId,
+        feeHeadId: l.feeHeadId,
+        sessionId: student.sessionId,
+        voucherId: voucher.id,
+        feeMonth: dto.feeMonth,
+        amount: l.amount,
+        dueDate: dto.dueDate,
+        fine,
+      })),
+    });
+
+    return tx.voucher.findUnique({
+      where: { id: voucher.id },
       include: voucherInclude,
     });
   }, { timeout: 15000 });
@@ -212,19 +217,7 @@ export async function generateBatchVouchers(dto: GenerateBatchVoucherDto, user: 
         const voucherNo = await nextVoucherNo(tx);
         const fine = 0;
 
-        await tx.feeCharge.createMany({
-          data: computed.lines.map((l) => ({
-            studentId: s.id,
-            feeHeadId: l.feeHeadId,
-            sessionId: student.sessionId,
-            feeMonth: dto.feeMonth,
-            amount: l.amount,
-            dueDate: dto.dueDate,
-            fine,
-          })),
-        });
-
-        await tx.voucher.create({
+        const voucher = await tx.voucher.create({
           data: {
             voucherNo,
             studentId: s.id,
@@ -244,6 +237,19 @@ export async function generateBatchVouchers(dto: GenerateBatchVoucherDto, user: 
               })),
             },
           },
+        });
+
+        await tx.feeCharge.createMany({
+          data: computed.lines.map((l) => ({
+            studentId: s.id,
+            feeHeadId: l.feeHeadId,
+            sessionId: student.sessionId,
+            voucherId: voucher.id,
+            feeMonth: dto.feeMonth,
+            amount: l.amount,
+            dueDate: dto.dueDate,
+            fine,
+          })),
         });
         created++;
       }

@@ -82,3 +82,22 @@ export function useUpdateVoucherStatus(id: number) {
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
   });
 }
+
+export function useVoucherStatusByNo(voucherNo: string) {
+  return useQuery({
+    queryKey: ['vouchers', 'status', voucherNo],
+    queryFn: () => api.get<any>(`/vouchers/by-voucher-no/${voucherNo}/status`),
+    enabled: !!voucherNo,
+  });
+}
+
+export function useRecalculateVoucher(voucherNo: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.patch<any>(`/vouchers/by-voucher-no/${voucherNo}/recalculate`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.all });
+      qc.invalidateQueries({ queryKey: ['vouchers', 'status', voucherNo] });
+    },
+  });
+}

@@ -16,6 +16,7 @@ import { promotionRouter } from './modules/promotions/promotion.router';
 import { voucherRouter } from './modules/vouchers/voucher.router';
 import { feeStructureRouter } from './modules/fee-structures/fee-structure.router';
 import { feePaymentRouter } from './modules/fee-payments/fee-payment.router';
+import { paymentRouter } from './modules/payments/payment.router';
 import { discountRouter } from './modules/discounts/discount.router';
 import { reportRouter } from './modules/reports/report.router';
 import { adminRouter } from './modules/admin/admin.router';
@@ -53,6 +54,7 @@ export function createApp(env: ApiEnv) {
   app.use('/api/v1/vouchers', voucherRouter);
   app.use('/api/v1/fee-structures', feeStructureRouter);
   app.use('/api/v1/fee-payments', feePaymentRouter);
+  app.use('/api/v1/payments', paymentRouter);
   app.use('/api/v1/discounts', discountRouter);
   app.use('/api/v1/reports', reportRouter);
   app.use('/api/v1/admin', adminRouter);
