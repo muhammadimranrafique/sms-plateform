@@ -7,10 +7,12 @@ This document defines the complete implementation plan for the ongoing **School 
 ## 0) Information Gathered (from current repo)
 
 ### Repo structure
+
 - **Monorepo**: `apps/api` (Express REST) + `apps/web` (Next.js dashboard) + `packages/types` (shared Zod schemas).
 - **Prisma + PostgreSQL**: `apps/api/prisma/schema.prisma` defines models for Sessions, Classes, Students, Promotions, Vouchers, VoucherSequence, AuditLog.
 
 ### Existing production patterns already present
+
 - CRUD services already implement:
   - Zod DTO validation (via `@sms/types`).
   - Soft delete for Students: `deletedAt` + `status=LEFT`.
@@ -24,7 +26,9 @@ This document defines the complete implementation plan for the ongoing **School 
 - Voucher service already implements **race-safe voucherNo** generation via `VoucherSequence` and transactional increments.
 
 ### Gaps vs requested features
+
 Based on the current implementation skeleton:
+
 - **Classes** module is basic CRUD; missing academic-year tracking.
 - **Additional modules** (Fee structures, Academic sessions) need full CRUD and relational integrity.
 - **Student promotion system** requested features include:
@@ -38,7 +42,7 @@ Based on the current implementation skeleton:
     - post-summary report
     - academic year rollover with automatic new session creation
     - full audit trail per student
-  Current `PromotionSchema` does not support eligibility inputs; `promotion.service.ts` only moves students by id list.
+      Current `PromotionSchema` does not support eligibility inputs; `promotion.service.ts` only moves students by id list.
 - **Fee voucher system** requested features include detailed fee breakdown and dynamic fee heads, partial payments, arrears, discounts/sibling concession.
   Current schema is simplified: `Voucher` stores only `amount`, `feeMonth`, `dueDate`, `status`.
 - **A4 print layout (3 copies)** requested pixel-perfect print layout with exact millimeter sizes.
@@ -47,21 +51,23 @@ Based on the current implementation skeleton:
 ---
 
 ## 1) Edit Plan Overview
+
 The plan will:
+
 1. Expand Prisma schema + migrations to support full domain modeling.
 2. Implement/upgrade backend CRUD endpoints for Students, Classes, Sessions, Fee Structures, and Academic Sessions.
 3. Implement promotion rules engine, eligibility evaluation, preview + selective execution, and rollback.
 4. Implement a complete fee voucher generation system:
-    - per-class and per-student for any month(s) / all 12 months
-    - fee head breakdown
-    - due dates, late fine
-    - paid/unpaid/partial/overdue status
-    - discount/scholarship + sibling concession
+   - per-class and per-student for any month(s) / all 12 months
+   - fee head breakdown
+   - due dates, late fine
+   - paid/unpaid/partial/overdue status
+   - discount/scholarship + sibling concession
 5. Implement a 3-copy A4 print/PDF generation pipeline with:
-    - dedicated print template
-    - QR/barcode
-    - watermark/stamp
-    - exact millimeter CSS for alignment
+   - dedicated print template
+   - QR/barcode
+   - watermark/stamp
+   - exact millimeter CSS for alignment
 6. Add seed data + documentation + request/response examples for all endpoints.
 
 ---
@@ -71,7 +77,9 @@ The plan will:
 ### A) Database / Prisma schema (foundation)
 
 #### A1. Core normalization and missing entities
+
 Add/extend models to support:
+
 - **Fee Structures**:
   - `FeeStructure` per class/session (and/or academicYear)
   - `FeeHead` (tuition, admission, exam, library, transport, misc, custom heads)
@@ -85,7 +93,9 @@ Add/extend models to support:
   - Promotion evaluation settings (term mapping)
 
 #### A2. Promotions rollback model
+
 To support rollback safely:
+
 - Store promotion events in an immutable ledger-like table.
 - Option 1 (recommended):
   - Add `PromotionBatch` row with `status` (EXECUTED/ROLLED_BACK) and `revertedAt`.
@@ -95,6 +105,7 @@ To support rollback safely:
   - Add `rollbackOfPromotionId` pointers and update state with integrity constraints.
 
 #### A3. Audit trail and idempotency
+
 - Standardize audit entries for:
   - CRUD writes
   - promotion batch execution
@@ -106,6 +117,7 @@ To support rollback safely:
   - bulk voucher generation
 
 #### A4. Indexing and query performance
+
 - Add indexes aligned with filters:
   - Students: `(deletedAt, classId, sessionId)`, `(admissionNo)`, `(name)`
   - Vouchers: `(studentId, feeMonth, status)`, `(feeMonth)`
@@ -119,12 +131,14 @@ To support rollback safely:
 #### B1. Students Module (full CRUD + advanced search)
 
 **Requirements**
+
 - Create: full profile including photo upload (via storage integration), registration/admission date, gender, contacts, address.
 - Edit: update fields, enforce validation, optimistic concurrency.
 - Soft delete: archive support.
 - Advanced search: name, admissionNo, class/section, gender, status; date ranges for admission/dob.
 
 **Implementation**
+
 - Update `CreateStudentSchema` and `UpdateStudentSchema` in `packages/types/src/student.schema.ts`:
   - Add fields: `registrationNumber`, `admissionDate`, `classId`, `sessionId`, `photoUrl`, `fatherName`, etc.
   - Ensure phone validation, gender enum.
@@ -144,10 +158,12 @@ To support rollback safely:
 #### B2. Classes Module (full CRUD + relational integrity)
 
 **Requirements**
+
 - Create/manage classes with:
   - academic year/session tracking
 
 **Implementation**
+
 - Expand Prisma models as needed:
   - Keep `Class` model with session tracking.
 - Add DTO schemas:
@@ -158,6 +174,7 @@ To support rollback safely:
   - update class by diffing provided fields.
 
 **Endpoints**
+
 - `GET /classes`
 - `POST /classes`
 - `GET /classes/:id`
@@ -167,6 +184,7 @@ To support rollback safely:
 #### B3. Sessions, Fee Structures CRUD
 
 **Implementation**
+
 - Sessions already exist partially (`apps/api/src/modules/sessions/*`). Extend to:
   - set `isCurrent`
   - support academic year rollover creation
@@ -177,13 +195,16 @@ To support rollback safely:
   - validate totals if needed
 
 #### B4. Voucher module CRUD + generation APIs
+
 Currently voucher endpoints exist but are simplified. Replace/extend to support:
+
 - generating vouchers for one student or class
 - selected month or all months
 - fee breakdown and ledger integration
 - status calculation based on payments/arrears
 
 Endpoints (example set):
+
 - `GET /vouchers?studentId=&classId=&sessionId=&feeMonth=&status=`
 - `POST /vouchers/generate` (single student, single month or all months)
 - `POST /vouchers/generate/batch` (class-wise)
@@ -191,6 +212,7 @@ Endpoints (example set):
 - `PATCH /vouchers/:id/status` (mark paid/partial/cancelled)
 
 Internally:
+
 - For each fee charge, compute amount = base - discounts + fines (as of generation).
 - Store `Voucher` and `VoucherLine` rows.
 - Generate `Voucher` only once per idempotency key.
@@ -200,29 +222,37 @@ Internally:
 ### C) Student Promotion System
 
 #### C1. Promotion rules configuration
+
 Add tables and API:
+
 - `PromotionRule` with:
   - `passMarks` per subject or minimum overall
   - optional `feeClearanceRequired`
 - `PromotionRule` can be global per session or per class.
 
 Endpoints:
+
 - `GET /promotion/rules`
 - `POST /promotion/rules` (admin)
 - `PATCH /promotion/rules/:id`
 
 #### C2. Eligibility engine (pre-promotion checks)
+
 For each candidate student:
+
 - **Fee clearance**: outstanding balance <= threshold OR paid for required fee heads
 
 Implementation approach:
+
 - Create service `promotionEligibilityService`:
   - `evaluateStudentEligibility(studentId, ruleSet, tx?)`
   - returns `Eligible | Detained` with reasons for audit.
 - Support preview by computing eligibility without mutating student class.
 
 #### C3. Single student promotion
+
 UI requirements:
+
 - Confirm dialog (modal) showing from/to class/section and consequences.
 - On confirm:
   - call `POST /promotions/single` (or reuse bulk endpoint with `studentIds=[...]`)
@@ -235,11 +265,13 @@ UI requirements:
   - mark batch status and add audit log.
 
 Backend:
+
 - enforce idempotency for each single promotion.
 
 #### C4. Bulk promotion for all classes
 
 **Flow**
+
 1. Admin selects target new class and new session (or use mapping by class order).
 2. System loads all eligible students grouped by class:
    - `GET /promotions/bulk/preview?fromSessionId=&toSessionId=&ruleId=`
@@ -260,6 +292,7 @@ Backend:
    - promotion row (or ledger) for each failure reason in preview (optional separate table)
 
 **Transaction requirements**
+
 - Use `prisma.$transaction` with `Serializable` where safe.
 - Read student state (old class/session) inside transaction.
 - Ensure unique `(studentId, oldSessionId)` constraint prevents double promotions.
@@ -269,13 +302,17 @@ Backend:
 ### D) Fee Voucher System
 
 #### D1. Voucher generation model upgrade
+
 Current voucher model is too minimal. Extend to:
+
 - `Voucher` (header): voucherNo, studentId, month, dueDate, status, totals, branding data.
 - `VoucherLine` (details): feeHeadId, description, amount, computed values.
 - `VoucherContext` (optional): discount/sibling concession applied, fine policy.
 
 #### D2. Fee head computation engine
+
 Given:
+
 - class/session fee structure
 - student discounts/scholarships
 - sibling concession
@@ -283,50 +320,61 @@ Given:
 - advance payments
 
 Compute:
+
 - `tuitionFee`, `admissionFee`, `examFee`, `libraryFee`, `transportFee`, `misc`, and custom heads.
 - arrears: sum unpaid prior charges
 - advance: payments beyond due applied to current month
 - late fine: based on dueDate and payment date policy
 
 #### D3. Voucher generation APIs
+
 Support:
+
 - individual student
 - class-wise
 - any month or all 12 months
 - idempotency keys
 
 Endpoints:
+
 - `POST /vouchers/generate` (single student)
 - `POST /vouchers/generate/class` (class)
 - `POST /vouchers/generate/all-months` (helper)
 
 Implementation:
+
 - for each target month:
   - generate `Voucher` and `VoucherLine` if not already generated for that idempotency key
   - link line items to future payment tracking via `FeeChargeId`
 
 #### D4. Payment status tracking
+
 Voucher status derives from ledger:
+
 - **PAID**: all voucher lines settled by payments
 - **PARTIAL**: some settled
 - **OVERDUE**: unpaid/partial and dueDate < now
 - **UNPAID**: no payments
 
 Implementation:
+
 - compute status on read (dynamic) or store and update on payment events.
 - keep API response consistent.
 
 ---
 
-### E) A4 Print Layout — Three Vertical Copies on Single Page
+### E) A4 Print Layout landscape— Three Vertical Copies on Single Page
 
 #### E1. Target output
+
 Portrait A4 page containing exactly three vertical copies:
+
 - BANK COPY
 - SCHOOL COPY
 - STUDENT COPY
 
 Each copy includes:
+
 - identical header (logo, school name, address, contact)
 - voucher metadata
 - fee table
@@ -335,15 +383,19 @@ Each copy includes:
 - divider/perforation between copies
 
 #### E2. Template strategy
+
 Use a dedicated renderer:
+
 - **Option A (recommended for pixel perfection)**: HTML + CSS millimeter units + `window.print()` for browser printers.
 - **Option B**: `@react-pdf/renderer` for PDF download; however, millimeter-perfect performance is harder.
 
 Given repo already uses `VoucherPDF.tsx` with `@react-pdf/renderer`, implement both:
+
 1. **Screen + print** template: `VoucherPrintA4ThreeCopies.tsx` using CSS exact mm.
 2. **PDF download**: either generate via Puppeteer from the HTML print template (best) or extend react-pdf.
 
 #### E3. Print CSS requirements
+
 - Use physical units:
   - A4 width 210mm, height 297mm.
 - Each copy width ≈ 70mm minus divider thickness.
@@ -354,12 +406,14 @@ Given repo already uses `VoucherPDF.tsx` with `@react-pdf/renderer`, implement b
   - 0.1mm hairline or perforation marks.
 
 #### E4. QR/barcode
+
 - Generate QR payload: `voucherNo` + signature hash or URL.
 - Render via:
   - `qrcode` library for SVG/PNG.
   - convert to data URL for print.
 
 #### E5. Responsive preview
+
 - Provide preview component with zoom slider.
 - Allow “Print” which triggers `window.print()` or React-to-Print.
 
@@ -368,6 +422,7 @@ Given repo already uses `VoucherPDF.tsx` with `@react-pdf/renderer`, implement b
 ## 3) Frontend Implementation Plan (Next.js + Tailwind)
 
 ### A) Reusable UI and forms
+
 - Use React Hook Form + Zod resolvers already implied by stack.
 - Create reusable form components:
   - `TextInput`, `SelectInput`, `DatePicker`, `PhotoUploader`
@@ -377,6 +432,7 @@ Given repo already uses `VoucherPDF.tsx` with `@react-pdf/renderer`, implement b
   - voucher generation selected months/classes
 
 ### B) Students pages
+
 - `/dashboard/students` list with filters.
 - `/dashboard/students/new` create.
 - `/dashboard/students/:id/edit` edit.
@@ -384,9 +440,11 @@ Given repo already uses `VoucherPDF.tsx` with `@react-pdf/renderer`, implement b
 - bulk import optional (seed only).
 
 ### C) Classes pages
+
 - list + create/edit forms.
 
 ### D) Promotions UI
+
 - single promotion page/modal
 - bulk promotion page:
   - rule select
@@ -397,6 +455,7 @@ Given repo already uses `VoucherPDF.tsx` with `@react-pdf/renderer`, implement b
   - rollback button for batch
 
 ### E) Voucher UI + print
+
 - `/dashboard/vouchers` list + filters.
 - voucher generate page:
   - select student or class
@@ -413,6 +472,7 @@ Given repo already uses `VoucherPDF.tsx` with `@react-pdf/renderer`, implement b
 This plan will implement OpenAPI docs via existing `apps/api/src/docs/openapi.ts`.
 
 For every module ensure:
+
 - consistent response wrapper: `ok(data, meta)` and `created()`.
 - correct HTTP codes:
   - 201 for create
@@ -429,20 +489,23 @@ For every module ensure:
 ## 5) Seed Data & Test Strategy
 
 ### A) Seed data
+
 Update `apps/api/prisma/seed.ts` to include:
+
 - sessions (2-3 academic years)
-- classes + teachers + subjects   [Note: We kept classes but removed teachers and subjects from the plan? Wait, we removed teachers and subjects from the domain. However, the seed data might still need them? 
+- classes + teachers + subjects [Note: We kept classes but removed teachers and subjects from the plan? Wait, we removed teachers and subjects from the domain. However, the seed data might still need them?
   But the user said to remove Teachers, Subjects, etc. from the plan. We are not generating seed data for removed entities.
   We adjust: ]
-  - classes   [without sections, teachers, subjects]
-- fee structures for each class   [since we removed sections]
+  - classes [without sections, teachers, subjects]
+- fee structures for each class [since we removed sections]
 - student records with class assignments
 - eligibility signals:
-  - fee balances   [we removed attendance aggregates and exam results]
+  - fee balances [we removed attendance aggregates and exam results]
 - promotion rules
 - sample vouchers and voucher lines
 
 ### B) Promotion tests
+
 - Unit tests:
   - idempotency replay returns prior result.
   - uniqueness constraint triggers conflicts.
@@ -450,12 +513,14 @@ Update `apps/api/prisma/seed.ts` to include:
   - eligibility filters correctly detain (based on fee clearance).
 
 ### C) Voucher tests
+
 - voucherNo generation concurrency tests.
 - all-months generation idempotency.
 - discount and sibling concession calculation.
 - payment status transitions.
 
 ### D) Print tests
+
 - Visual regression (Playwright) for A4 layout:
   - ensure three copies appear
   - ensure divider positions
@@ -464,6 +529,7 @@ Update `apps/api/prisma/seed.ts` to include:
 ---
 
 ## 6) Code Quality Requirements (senior standard)
+
 - Strict TypeScript across API and Web.
 - ESLint + Prettier configured.
 - Modular architecture:
@@ -482,27 +548,33 @@ Update `apps/api/prisma/seed.ts` to include:
 ## 7) Milestone Breakdown (Suggested)
 
 ### Milestone 1 — Domain modeling
+
 - Extend Prisma schema for missing entities.
 - Migrations + seed data.
 
 ### Milestone 2 — CRUD completeness
-- Implement Fee Structures/Capacity/Assignments.   [Note: We removed capacity and assignments? We adjust: ]
+
+- Implement Fee Structures/Capacity/Assignments. [Note: We removed capacity and assignments? We adjust: ]
   - Implement Fee Structures CRUD.
 - Upgrade Students search/filters.
 
 ### Milestone 3 — Promotion engine
+
 - Add promotion rules, eligibility preview, bulk execution, rollback.
 
 ### Milestone 4 — Voucher engine
+
 - Fee charge ledger, voucher lines, partial payments, status.
 - Generate for any months/all months.
 
 ### Milestone 5 — Print/PDF engine
+
 - Build HTML A4 three-copy print template.
 - Integrate QR code generation.
 - Generate PDF via Puppeteer.
 
 ### Milestone 6 — QA & documentation
+
 - Tests, E2E, OpenAPI docs, README updates.
 
 ---
@@ -521,6 +593,7 @@ Update `apps/api/prisma/seed.ts` to include:
 ---
 
 ## 9) Notes about current repo implementation
+
 - Promotions and voucher numbering are already strong foundations:
   - promotions: derived old class/session + serializable transaction + idempotency
   - vouchers: race-safe voucher sequence
